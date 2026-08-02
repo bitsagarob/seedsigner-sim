@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>SeedSigner simulator</title>
+<meta name="description" content="The real SeedSigner firmware running in a browser tab. A simulator, not a wallet.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#07111f">
+<style>
+  /* Deliberately plain, and deliberately self-contained: the page's own CSP
+     forbids anything external, so no webfonts and no third-party anything. The
+     palette matches wallet.html so the two pages read as one thing. */
+  :root {
+    color-scheme: dark;
+    --bg: #0b0c0e;
+    --panel: #12151a;
+    --line: #2a2f36;
+    --text: #d7dbe0;
+    --muted: #7c848f;
+    --accent: #f7931a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 3rem 1.25rem 4rem; max-width: 44rem;
+    background: var(--bg); color: var(--text);
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 .5rem; font-weight: 600; }
+  h2 { font-size: 1.05rem; margin: 2.5rem 0 .75rem; font-weight: 600; }
+  p { margin: 0 0 1rem; }
+  a { color: var(--accent); }
+  .lead { color: var(--muted); font-size: 1.05rem; margin-bottom: 2rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+
+  /* The safety note is the most important thing on the page, so it is first and
+     it is bordered -- but not red and not shouting. Someone who reads it should
+     come away informed, not alarmed. */
+  .note {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--panel); border-radius: 8px; padding: 1rem 1.25rem;
+    margin: 0 0 2rem;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { color: #fff; }
+
+  .start { margin: 0 0 .5rem; }
+  .button {
+    display: inline-block; text-decoration: none;
+    border: 1px solid var(--accent); border-radius: 8px;
+    padding: .7rem 1.4rem; font-weight: 600; color: var(--accent);
+  }
+  .button:hover { background: var(--accent); color: #0b0c0e; }
+  .after { color: var(--muted); font-size: .9rem; }
+
+  ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  li > strong { color: var(--text); }
+  .muted { color: var(--muted); }
+
+  footer {
+    margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .9rem;
+  }
+  footer a { color: var(--muted); }
+  footer p { margin: 0 0 .5rem; }
+
+  @media (max-width: 32rem) {
+    body { padding: 2rem 1rem 3rem; font-size: 15px; }
+    h1 { font-size: 1.35rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>SeedSigner simulator</h1>
+<p class="lead">The real SeedSigner firmware — the actual Python from the device —
+running in this browser tab. Its screen is a canvas, its buttons are your keyboard,
+and its camera is your webcam.</p>
+
+<div class="note">
+  <p><strong>This is a simulator, not a wallet.</strong> It runs in a browser tab on
+  an ordinary computer: no secure element, no air gap, nothing hidden from the rest
+  of the machine.</p>
+  <p>Treat every key it shows you as public, and
+  <strong>never enter a seed phrase you rely on</strong>. If you want something to
+  type in, use a BIP39 test vector — they exist for exactly this.</p>
+</div>
+
+<p class="start"><a class="button" href="wallet.html">Open the simulator</a></p>
+<p class="after">First load fetches about 30 MB (Python and the wallet) and takes a
+few seconds. After that it runs offline. Arrow keys move, Enter selects,
+<code>1</code> <code>2</code> <code>3</code> are the side buttons — or click the
+buttons on the device.</p>
+
+<h2>What it actually is</h2>
+<p>Not a re-creation. The wallet's own Python is executed by
+<a href="https://pyodide.org" rel="noopener">Pyodide</a> — CPython compiled to
+WebAssembly — inside a Web Worker, and the firmware's own entry point is what runs.
+The menus, the seed handling, the PSBT parsing and the QR encoders are all
+upstream's, unmodified.</p>
+<p>Only the four places the firmware reaches for hardware are replaced, from the
+outside:</p>
+<ul>
+  <li><strong>Display</strong> — the panel driver is swapped beneath SeedSigner's
+  own renderer, and raw frames are painted into a canvas.</li>
+  <li><strong>Buttons</strong> — the worker is blocked inside the wallet's main loop
+  and can never answer a message, so keypresses cross on shared memory and wake it.</li>
+  <li><strong>Camera</strong> — your webcam. SeedSigner reads QR codes with a C
+  library that has no WebAssembly build, so the browser decodes the image and hands
+  the raw bytes to the firmware's own unmodified decoder.</li>
+  <li><strong>Smartcard</strong> — a simulated Satochip answering real APDUs,
+  because browsers have no smartcard API at all.</li>
+</ul>
+<p>The wallet is pinned to a single upstream commit, and a build script in the
+repository rebuilds it from that commit — so the claim that this is the real
+firmware is one you can check rather than take on trust.</p>
+
+<h2>What works, and what does not</h2>
+<ul>
+  <li><strong>Works:</strong> the full menu tree, loading a seed by QR or by hand,
+  passphrases, xpub export, loading and signing a PSBT, SeedQR backup, and every
+  screen that draws a QR.</li>
+  <li><strong>Partly:</strong> three simulated smartcards go in and out of the
+  reader and can be initialised with a PIN. Storing a seed on a card, and signing
+  with one, are not implemented yet.</li>
+  <li><strong>Not at all:</strong> microSD, so settings reset when you reload.
+  Animations do not animate, because this environment has no threads.</li>
+</ul>
+<p class="muted">Nothing leaves the tab. This page and the simulator both declare a
+content security policy that permits no connections to any other origin, and there is no
+server to send anything to.</p>
+
+<h2>If the simulator does not start</h2>
+<p>It needs to be served with <code>Cross-Origin-Opener-Policy: same-origin</code>
+and <code>Cross-Origin-Embedder-Policy: require-corp</code>; without them the
+browser withholds the shared memory every keypress travels on, and the wallet never
+starts. Scanning additionally needs a secure context — https, or localhost. Both are
+covered in the repository's self-hosting notes.</p>
+
+<footer>
+  <p>Source, and the build script that rebuilds the wallet from its pinned upstream
+  commit:
+  <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">github.com/bitsagarob/seedsigner-sim</a>.</p>
+  <p>MIT licensed. SeedSigner itself is MIT too, Copyright (c) 2021 SeedSigner; the
+  firmware running here is their work.</p>
+  <p>An independent project, not affiliated with or endorsed by the SeedSigner
+  project. Running this proves nothing about a real device.</p>
+</footer>
+
+</body>
+</html>
