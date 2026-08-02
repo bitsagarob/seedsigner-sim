@@ -1,0 +1,71 @@
+# Runs the browser suite on every push and pull request.
+#
+# The two things this needs are not in the repo. wallet.zip is built from a
+# pinned upstream SeedSigner commit, and the Pyodide runtime is 26MB of someone
+# else's release; committing either would mean the tests could pass against a
+# stale copy of the thing they are meant to be testing. Both are produced by the
+# scripts in build/ and cached by their pinned inputs.
+name: test
+
+on:
+  # Pushes only on the default branch, and every pull request. A
+  # contributor's branch is tested when they open the PR, rather than
+  # twice for every push once they have.
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-24.04
+    # Pyodide boots CPython in WebAssembly for every browser test, so this is
+    # minutes rather than seconds even when everything passes.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Keyed on the build scripts and their pins, so changing what gets built
+      # misses the cache -- which is exactly when it should.
+      - name: Cache the build outputs
+        id: assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/out
+            src/web/pyodide
+          key: assets-${{ hashFiles('build/*.sh', 'build/checksums.txt', 'UPSTREAM') }}
+
+      # fetch-assets.sh needs curl and python3; build-wallet-zip.sh also needs
+      # git. All three are on the runner image already.
+      - name: Build wallet.zip and fetch the Pyodide runtime
+        if: steps.assets.outputs.cache-hit != 'true'
+        run: |
+          ./build/fetch-assets.sh
+          ./build/build-wallet-zip.sh
+
+      - name: Install Playwright
+        run: |
+          pip install playwright==1.47.0
+          playwright install --with-deps chromium
+
+      - name: Run the suite
+        run: python3 test/run.py
+
+      # The screenshots are the readable half of a failure: they show what the
+      # wallet was displaying when a check went red.
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: test/artifacts/*.png
+          if-no-files-found: ignore
+          retention-days: 14

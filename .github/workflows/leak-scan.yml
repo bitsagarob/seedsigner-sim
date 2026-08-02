@@ -1,0 +1,47 @@
+# Fails the build if a tracked file leaks the author's infrastructure.
+#
+# This repo is published from a machine that runs other things. The realistic
+# accident is not a leaked key, it is a hardcoded home directory naming the
+# account, a private address naming the subnet, or an internal hostname naming a
+# box -- free reconnaissance, committed by mistake, and invisible in a diff once
+# it is a few hundred lines down.
+#
+# A human can catch that once. A human cannot catch it on every commit forever.
+#
+# The rules and, more importantly, the allowlist live in test/leak_scan.py so the
+# same check can be run locally before pushing. Public URLs are not touched: the
+# project's own GitHub links belong here, and a scanner that banned them would be
+# switched off within a week.
+name: leak-scan
+
+on:
+  # Pushes only on the default branch, and every pull request. A
+  # contributor's branch is tested when they open the PR, rather than
+  # twice for every push once they have.
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Scan tracked files
+        # LEAK_SCAN_EXTRA is for names that must not be committed but must not be
+        # written down in a public file either -- spelling them out in the
+        # scanner would leak precisely what it exists to stop. Optional: without
+        # the secret the shape-based rules still run.
+        env:
+          LEAK_SCAN_EXTRA: ${{ secrets.LEAK_SCAN_EXTRA }}
+        run: python3 test/leak_scan.py

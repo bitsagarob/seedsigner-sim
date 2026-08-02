@@ -1,0 +1,28 @@
+# The Pyodide runtime: ~26 MB of prebuilt WebAssembly, fetched and hash-verified
+# by build/fetch-assets.sh. Deliberately not committed -- a binary nobody can
+# read does not belong in a repository whose point is that you can read it.
+/src/web/pyodide/
+
+# Build artefacts. wallet.zip is what build/build-wallet-zip.sh produces; it is
+# not a source file, and committing it would invite people to trust the copy in
+# git instead of rebuilding and comparing, which is the whole idea.
+/build/out/
+wallet.zip
+wallet.zip.manifest
+
+# Python bytecode. Host-specific and timestamped, so it can never be part of a
+# reproducible artifact; the build script refuses to package any it finds.
+__pycache__/
+*.pyc
+*.pyo
+
+# Build scratch space, in case a run is interrupted before its trap fires.
+# Normal runs use mktemp outside the repository and clean up after themselves.
+/build/tmp/
+/build/staging/
+*.tmp
+
+# Editor and OS droppings
+.DS_Store
+*.swp
+*~

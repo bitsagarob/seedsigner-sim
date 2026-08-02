@@ -1,0 +1,15 @@
+# The wallet this simulator runs, pinned.
+#
+# src/seedsigner in the built wallet.zip is this tree verbatim. Nothing in this
+# repository patches it: the four hardware seams are replaced from the outside,
+# by the modules in src/shims. That is the property the build script exists to
+# let you check for yourself.
+repo   = https://github.com/3rdIteration/seedsigner.git
+commit = f6e79ba098558ec4ec05326a4fcbfb7b429760ea
+branch = dev
+
+# The wallet.zip that build/build-wallet-zip.sh produces from the pin above.
+# Rebuild it yourself and compare; if these differ, something between that commit
+# and the file you were served is not what it claims to be.
+wallet_zip_sha256      = 47f66aad2bdd2efe7eaea5cad6586687ffbc642b617fda83784a054863a00139
+wallet_zip_contents_sha256 = 6efbddaed55ceca2f88b80ad3879c75168b6bb06dd41cc443f9bf2185bdea402

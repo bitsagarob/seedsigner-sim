@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>SeedSigner wallet simulator</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#07111f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SeedSigner">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 2rem 1rem; background: #0b0c0e; color: #d7dbe0;
+    font: 15px/1.6 ui-sans-serif, system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  }
+  /* Everything is width-bounded: the device is landscape and wider than a
+     phone, so it scales rather than overflowing. */
+  h1, #status, .hint { max-width: 100%; text-align: center; }
+  #device { width: 100%; }
+  #screen {
+    display: block; width: 100%; height: 100%;
+    image-rendering: pixelated; background: #000;
+  }
+  #status { color: #7c848f; min-height: 0; }
+  #status:empty { display: none; }
+  header { display: flex; align-items: center; gap: .5rem; }
+  h1 { font-size: 1.2rem; margin: 0; font-weight: 600; }
+  #about > summary {
+    list-style: none; cursor: pointer; width: 1.35rem; height: 1.35rem;
+    border-radius: 50%; border: 1px solid #3a4048; color: #9aa3ae;
+    display: grid; place-items: center; font: italic 600 .85rem/1 serif;
+  }
+  #about > summary::-webkit-details-marker { display: none; }
+  #about > summary:hover { color: #f7931a; border-color: #f7931a; }
+  #about > div {
+    position: absolute; left: 50%; transform: translateX(-50%); z-index: 10;
+    margin-top: .5rem; max-width: min(46rem, calc(100vw - 2rem));
+    background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
+    padding: 1rem 1.25rem; font-size: .88rem; color: #b6bec8; text-align: left;
+  }
+  #about > div a { color: #f7931a; }
+  #about ul { padding-left: 1.1rem; }
+  #about li { margin: .35rem 0; }
+  #status.ready { color: #22c55e; }
+  #status.err { color: #ef4444; white-space: pre-wrap; max-width: 70ch; }
+  .hint { color: #7c848f; font-size: .9em; }
+  .warn {
+    color: #e8c07a; font-size: .9em; text-align: center; margin: 0;
+    max-width: 60ch; border: 1px solid #4a3d22; background: #211b10;
+    border-radius: 8px; padding: .5rem .9rem;
+  }
+  .hint a { color: #7c848f; }
+  @media (max-width: 30rem) {
+    body { padding: 1rem .75rem; gap: .75rem; }
+    h1 { font-size: 1.05rem; }
+    .hint { font-size: .82em; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>SeedSigner wallet simulator</h1>
+    <details id="about">
+      <summary aria-label="How this works" title="How this works">i</summary>
+      <div>
+        <p><strong>This is the real SeedSigner firmware</strong>, running in this tab.
+        Its Python is executed by Pyodide (CPython compiled to WebAssembly) inside a
+        Web Worker. The wallet code itself is unmodified; only the four places it
+        reaches for hardware are replaced.</p>
+        <ul>
+          <li><strong>Display</strong> — the driver hands raw RGB frames to the page,
+          which paints them into the canvas above.</li>
+          <li><strong>Buttons</strong> — the worker blocks on the wallet's main loop and
+          can never answer a message, so keys cross on a SharedArrayBuffer and wake it
+          with Atomics.</li>
+          <li><strong>Camera</strong> — your webcam via getUserMedia. SeedSigner reads QR
+          codes with pyzbar, a C library with no WebAssembly build, so decoding is done
+          by the browser's BarcodeDetector or by jsQR and the bytes are handed to the
+          unmodified decoder.</li>
+          <li><strong>Smartcard</strong> — a simulated Satochip that answers real APDUs,
+          because browsers have no smartcard API at all.</li>
+        </ul>
+        <p>Nothing leaves your browser. The page declares a content security policy that
+        permits no connections to any other origin, and there is no server to send anything to.</p>
+        <p><strong>It is a simulator.</strong> Treat every key it shows as public and
+        never type a seed phrase you rely on.</p>
+        <p>Source, and a build script that rebuilds this wallet from a pinned
+        upstream commit so you can check the claim above yourself:
+        <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">seedsigner-sim</a>.
+        The device firmware lives in
+        <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">seedsigner-os</a>.</p>
+      </div>
+    </details>
+  </header>
+  <div id="device"></div>
+  <canvas id="screen" width="320" height="240"></canvas>
+  <p id="status">starting…</p>
+  <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
+  element. Never enter a seed phrase you rely on — use a BIP39 test vector.</p>
+  <div id="cardtray"></div>
+  <p class="hint"><a id="debuglink" href="?debug=1">debug</a></p>
+  <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>
+
+<script src="seedsigner-device.js"></script>
+<script src="wallet-camera.js"></script>
+<script src="wallet-cards.js"></script>
+<script>
+// Offline cache. Registered late and failure-tolerant: the simulator must work
+// exactly the same if this is unavailable or blocked.
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+
+// Tracing is off unless asked for. It narrates every screen, thread and key to
+// the console, which is what the tests read, but it is noise for anyone else.
+const DEBUG = new URLSearchParams(location.search).has("debug");
+
+let W = 320, H = 240;  // corrected by the worker once the renderer exists
+const canvas = document.getElementById("screen");
+const deviceEl = document.getElementById("device");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+
+// [0] = has a key been posted, [1] = which key. The worker blocks on [0].
+const shared = new SharedArrayBuffer(8);
+const keyBuffer = new Int32Array(shared);
+
+// Frames and decoded QR payloads travel the same way, for the same reason: the
+// worker is blocked inside the wallet's main loop and cannot answer a message.
+const cameraBuffer = CameraChannel.createBuffer();
+
+// Which of the three simulated smartcards is in the reader. Same channel,
+// same reason: the worker is blocked and cannot answer a message.
+const cardBuffer = CardTray.createBuffer();
+
+// An index into BUTTON_NAMES on the Python side. This fork identifies
+// buttons by name rather than GPIO number, and the shared buffer carries ints.
+const KEYMAP = {
+  ArrowUp: 1, ArrowDown: 2, ArrowLeft: 3, ArrowRight: 4,
+  Enter: 5, " ": 5, "1": 6, "2": 7, "3": 8,
+};
+
+function sendKey(channel) {
+  Atomics.store(keyBuffer, 1, channel);
+  Atomics.store(keyBuffer, 0, 1);
+  Atomics.notify(keyBuffer, 0);
+}
+
+// Rebuilt only when the worker reports a screen the current art was not sized
+// for, because rebuilding detaches the canvas the wallet is painting into.
+let deviceScreen = "";
+function mountDevice(width, height) {
+  const size = width + "x" + height;
+  if (deviceScreen === size) return;
+  deviceScreen = size;
+  const device = SeedSignerDevice.render(deviceEl, {
+    screenWidth: width, screenHeight: height, interactive: true, onKey: sendKey,
+    maxWidth: "68rem",   // ~1.45x the native 320x240 in the cutout
+    card: false,         // the tray below is what says whether a card is in
+  });
+  device.screen.appendChild(canvas);
+}
+
+function paint(bytes) {
+  // Guard against a stride mismatch painting garbage: the byte count is
+  // authoritative about the frame's real size.
+  if (bytes.length !== W * H * 3) {
+    console.warn(`frame is ${bytes.length} bytes, expected ${W * H * 3}`);
+    return;
+  }
+  const frame = ctx.createImageData(W, H);
+  for (let src = 0, dst = 0; src < bytes.length; src += 3, dst += 4) {
+    frame.data[dst] = bytes[src];
+    frame.data[dst + 1] = bytes[src + 1];
+    frame.data[dst + 2] = bytes[src + 2];
+    frame.data[dst + 3] = 255;
+  }
+  ctx.putImageData(frame, 0, 0);
+}
+
+mountDevice(W, H);
+
+if (!window.crossOriginIsolated) {
+  statusEl.textContent = "this page needs cross-origin isolation, which the server is not sending";
+  statusEl.className = "err";
+} else {
+  const worker = new Worker("wallet-worker.js");
+
+  worker.onmessage = (event) => {
+    const { type } = event.data;
+    if (type === "size") {
+      W = event.data.width; H = event.data.height;
+      canvas.width = W; canvas.height = H;
+      // No inline size: the device's screen cutout drives the canvas, in
+      // percentages, so both stay registered at any viewport width.
+      mountDevice(W, H);
+    } else if (type === "frame") {
+      paint(event.data.frame);
+      if (statusEl.className !== "ready") {
+        statusEl.textContent = "";
+        statusEl.className = "ready";
+      }
+    } else if (type === "log") {
+      if (DEBUG) console.log("[py] " + event.data.message);
+    } else if (type === "status") {
+      statusEl.textContent = event.data.message;
+    } else if (type === "ready") {
+      statusEl.textContent = "";
+      statusEl.className = "ready";
+    } else if (type === "error") {
+      statusEl.textContent = "failed: " + event.data.message;
+      statusEl.className = "err";
+    }
+  };
+
+  // The camera stays idle until the wallet asks for it, so nothing here prompts
+  // for permission before the user actually chooses to scan.
+  CameraChannel.runPage(cameraBuffer);
+  CardTray.runPage(cardBuffer, "cardtray");
+
+  worker.postMessage({
+    type: "init", sharedBuffer: shared, cameraBuffer, cardBuffer,
+    width: W, height: H, debug: DEBUG,
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const channel = KEYMAP[event.key];
+    if (channel === undefined) return;
+    event.preventDefault();
+    sendKey(channel);
+  });
+}
+</script>
+</body>
+</html>

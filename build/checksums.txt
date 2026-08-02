@@ -1,0 +1,36 @@
+# sha256 of the third-party files that ARE committed to this repository.
+#
+# Everything else third-party is fetched and verified at build time: the wallet
+# and its Python dependencies by build/build-wallet-zip.sh, the Pyodide runtime
+# by build/fetch-assets.sh. What is left in the repo is small enough to read and
+# is listed here so that "small enough to read" can be checked rather than
+# assumed.
+#
+# Check them from the repository root with either of:
+#
+#     sha256sum -c build/checksums.txt
+#     ./build/fetch-assets.sh --check
+#
+# jsQR 1.4.0, Apache-2.0. This is the file published as dist/jsQR.js in the npm
+# package jsqr@1.4.0, unmodified. To confirm that independently, and not just
+# that it matches the line below:
+#
+#     curl -sL https://registry.npmjs.org/jsqr/-/jsqr-1.4.0.tgz | tar xzO package/dist/jsQR.js | sha256sum
+#
+bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.js
+
+# Runtime-fetched sources. wallet.zip is not the whole story: these are
+# fetched separately by the page and include the shim that returns the decoded
+# QR payload, so verifying the zip alone leaves them unchecked.
+084eee06eddd50033eb96a62c753dda3a1c541add9dd0e4e15266fcef6f4abe0  src/shims/browser_camera.py
+09f9ae5c73128719261d757ff5184e79912158ceb21dc650e11243da093644f3  src/shims/browser_display.py
+2e1b0500e002f33684e9187a9c3d2752f526ce6e78f0e02feea238e92c0dee5b  src/shims/browser_qr.py
+bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.js
+0032dfa675cd36933e824e200e1ff6303b833589f15d8f6347642464d477f8c5  src/web/seedsigner-device.js
+cca82c72670d02443cd519d3f2c51daee7df6e5f522ef63c3f5e6b9c3bc9d48f  src/web/sw.js
+e7279e0f91233abdf83725250c3f3b242180f57781157862974eb7dc2eb1bb93  src/web/wallet-camera.js
+bc6d9f2f7aaf404928a75629ab194d3a1ced4609721126a818af43c8e2e6eb65  src/web/wallet-cards.js
+981f96990c7fda8477d741b198a40128d50ba591da3a812d8d19b850132e75bd  src/web/wallet-worker.js
+9930517f2b7d5194ab0f677e66be276581800679b275cc6134debeda8a0bc42b  src/web/index.html
+286646fccab84d9c4b7e2202c3755bd0a0c004378893fb23d7b2c32c03d63202  src/web/wallet.html
+2e84bdc9ea48e5be912aaf9adf59868102ec4851be790bfe7c6cba006b419ac4  src/web/manifest.json
