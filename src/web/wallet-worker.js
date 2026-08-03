@@ -88,6 +88,13 @@ async function boot(width, height) {
     self.postMessage({ type: "size", width: w, height: h });
   });
 
+  // What the wallet's settings say the Bitcoin network is. Unlike js_log this
+  // is not behind the debug flag: the page shows it to everyone, and it matters
+  // most to the visitor who never turns tracing on.
+  pyodide.globals.set("js_network", (name, mainnet) => {
+    self.postMessage({ type: "network", name: String(name), mainnet: !!mainnet });
+  });
+
   // Blocking read of the next keypress, driven by the page.
   pyodide.globals.set("js_wait_for_key", () => {
     Atomics.wait(keyBuffer, STATE, 0);
@@ -135,12 +142,26 @@ function shims(width, height) {
 import sys, json, importlib, importlib.abc, importlib.util, threading
 sys.path.insert(0, "/wallet")
 
-# Match the SeedSigner Plus panel. Settings reads settings.json from the
-# working directory when not running on SeedSigner OS.
+# The device's own settings file, written before the wallet reads it. Settings
+# loads settings.json from the working directory when it is not running on
+# SeedSigner OS, so both of these are configuration, the way a configured device
+# would have them, and nothing under seedsigner/ is touched to get them.
+#
+#   display_config  the SeedSigner Plus panel, which is the screen drawn here.
+#   network         Testnet, where SeedSigner's own default is Mainnet. Nothing
+#                   in a browser tab should be pointed at real coins, and the
+#                   rest of the page spends its time saying so, so mainnet is
+#                   not where a visitor should land without having asked. It is
+#                   still in Settings > Advanced > Bitcoin network and still
+#                   selectable there, exactly as on hardware: what changes is
+#                   where this starts, not what it can reach.
+#
+# Both keys and both values are SettingsConstants, and the same ones in either
+# firmware: SETTING__DISPLAY_CONFIGURATION, SETTING__NETWORK and TESTNET.
 import os, json
 os.chdir("/wallet")
 with open("/wallet/settings.json", "w") as handle:
-    json.dump({"display_config": "st7789_320x240"}, handle)
+    json.dump({"display_config": "st7789_320x240", "network": "T"}, handle)
 
 # --- no real threads in the browser -----------------------------------------
 class _NoThread:
@@ -218,6 +239,21 @@ class _NoTimer:
     def is_alive(self): return False
 
 threading.Timer = _NoTimer
+
+# A lock that cannot deadlock, because there is nobody here to deadlock with.
+#
+# Running a Timer's callback inline on start() runs it inside whatever the
+# scheduler was holding when it scheduled it, and Settings.save() schedules its
+# write while holding _save_lock, which the write then takes again. On a device
+# those are two threads and the second one waits a moment for the first. Here
+# they are one thread, and a plain Lock waits for itself forever: the wallet
+# accepted the settings change, stored it, and then never drew another frame.
+#
+# There is one thread in this environment, so the only acquire that can ever
+# block is a thread blocking on itself, which is a deadlock rather than
+# contention. A reentrant lock turns exactly that case into a pass and leaves
+# every other use of a lock as it was.
+threading.Lock = threading.RLock
 
 # --- pycryptodomex is pycryptodome under another name ------------------------
 class _CryptodomeAlias(importlib.abc.MetaPathFinder):
@@ -460,6 +496,35 @@ if _ss_os is not None:
 
     import seedsigner.controller as _ctrl
     _ctrl.is_seedsigner_os_dev_build = _traced_devbuild
+
+# --- which Bitcoin network the wallet is set to ------------------------------
+# The page has to show this, and the page must not be the one that knows it: a
+# second copy of a setting is a copy that can disagree with the wallet, and it
+# would disagree exactly when someone had just changed the setting. So the value
+# is read back out of Settings with upstream's own accessors, at the two moments
+# it can be new: once here, before the controller starts, and again after every
+# write the wallet makes. set_value is that write, for every settings screen in
+# both firmwares, so wrapping it observes the change rather than predicting it.
+from seedsigner.models.settings import Settings
+from seedsigner.models.settings_definition import SettingsConstants
+
+def _report_network():
+    try:
+        settings = Settings.get_instance()
+        value = settings.get_value(SettingsConstants.SETTING__NETWORK)
+        name = settings.get_value_display_name(SettingsConstants.SETTING__NETWORK)
+        js_network(str(name), value == SettingsConstants.MAINNET)
+    except Exception as exc:
+        js_log(f"network report failed: {type(exc).__name__}: {exc}")
+
+_orig_set_value = Settings.set_value
+def _traced_set_value(self, *args, **kwargs):
+    result = _orig_set_value(self, *args, **kwargs)
+    _report_network()
+    return result
+Settings.set_value = _traced_set_value
+
+_report_network()
 
 import time as _time
 _orig_sleep = _time.sleep

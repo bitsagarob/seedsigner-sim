@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>SeedSigner simulator</title>
-<meta name="description" content="The real SeedSigner firmware running in a browser tab. A simulator, not a wallet.">
+<meta name="description" content="Real SeedSigner device firmware running in a browser tab. A simulator, not a wallet.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -77,7 +77,7 @@
 <body>
 
 <h1>SeedSigner simulator</h1>
-<p class="lead">The real SeedSigner firmware, the actual Python from the device,
+<p class="lead">Real SeedSigner device firmware, the actual Python off the device,
 running in this browser tab. Its screen is a canvas, its buttons are your keyboard,
 and its camera is your webcam.</p>
 
@@ -102,8 +102,12 @@ buttons on the device.</p>
 WebAssembly) inside a Web Worker, and the firmware's own entry point is what runs.
 The menus, the seed handling, the PSBT parsing and the QR encoders are all
 upstream's, unmodified.</p>
+<p>Two firmwares are built and the simulator says which one it is running: stock
+SeedSigner, what a plain device runs, and the 3rdIteration smartcard fork, a third
+party fork that adds SeedKeeper and Satochip support. The control under the device
+switches between them.</p>
 <p>Only the four places the firmware reaches for hardware are replaced, from the
-outside:</p>
+outside, and the fourth only exists in the fork:</p>
 <ul>
   <li><strong>Display:</strong> the panel driver is swapped beneath SeedSigner's
   own renderer, and raw frames are painted into a canvas.</li>
@@ -113,10 +117,11 @@ outside:</p>
   library that has no WebAssembly build, so the browser decodes the image and hands
   the raw bytes to the firmware's own unmodified decoder.</li>
   <li><strong>Smartcard:</strong> simulated SeedKeeper and Satochip cards answering
-  real APDUs, because browsers have no smartcard API at all.</li>
+  real APDUs, because browsers have no smartcard API at all. The smartcard fork
+  only: stock SeedSigner has no card code for them to answer.</li>
 </ul>
-<p>The wallet is pinned to a single upstream commit, and a build script in the
-repository rebuilds it from that commit, so the claim that this is the real
+<p>Each firmware is pinned to a single upstream commit, and a build script in the
+repository rebuilds it from that commit, so the claim that this is real device
 firmware is one you can check rather than take on trust.</p>
 
 <h2>What works, and what does not</h2>
@@ -124,10 +129,10 @@ firmware is one you can check rather than take on trust.</p>
   <li><strong>Works:</strong> the full menu tree, loading a seed by QR or by hand,
   passphrases, xpub export, loading and signing a PSBT, SeedQR backup, and every
   screen that draws a QR.</li>
-  <li><strong>Partly:</strong> three simulated smartcards go in and out of the
-  reader, each a SeedKeeper or a Satochip, and can be initialised with a PIN. A
-  seed can be saved onto a SeedKeeper and loaded back off it. Signing on a card is
-  not implemented yet.</li>
+  <li><strong>Partly, and on the smartcard fork only:</strong> three simulated
+  smartcards go in and out of the reader, each a SeedKeeper or a Satochip, and can
+  be initialised with a PIN. A seed can be saved onto a SeedKeeper and loaded back
+  off it. Signing on a card is not implemented yet.</li>
   <li><strong>Not at all:</strong> microSD, so settings reset when you reload.
   Animations do not animate, because this environment has no threads.</li>
 </ul>

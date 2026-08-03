@@ -1,10 +1,14 @@
 # Architecture
 
-How the real SeedSigner firmware ends up running in a browser tab, and why the
-code looks the way it does.
+How real SeedSigner device firmware ends up running in a browser tab, and why the
+code looks the way it does. Two firmwares are built and the page runs one of
+them: stock SeedSigner, and the 3rdIteration smartcard fork. Everything below is
+true of both unless it says otherwise, and where they differ the difference is
+almost always the smartcard.
 
 The short version: the wallet's own Python runs unmodified under Pyodide in a Web
-Worker, and four hardware seams are replaced from the outside. One constraint (the
+Worker, and four hardware seams are replaced from the outside, three of them
+under stock, which has no smartcard code to reach for. One constraint (the
 worker is permanently blocked inside the wallet's main loop and can never answer a
 message) explains most of the rest.
 
@@ -40,11 +44,13 @@ Three buffers cross the boundary, one per input: keys, camera, card tray. Output
 the display frames, goes the other way as ordinary `postMessage`, because that
 direction still works (see below).
 
-`wallet.zip` is the wallet: the `seedsigner` package from the commit pinned in
-[`UPSTREAM`](../UPSTREAM), the pure-Python dependencies it needs (embit,
-pysatochip, qrcode, mnemonic, urtypes, ecdsa, …), and the simulated `smartcard`
-package that stands in for pyscard. It is fetched and unpacked into Pyodide's
-in-memory filesystem at `/wallet`, which becomes the working directory.
+`wallet-<firmware>.zip` is the wallet: the `seedsigner` package from the commit
+that firmware's section of [`UPSTREAM`](../UPSTREAM) pins, the pure-Python
+dependencies it needs (embit, pysatochip, qrcode, mnemonic, urtypes, ecdsa, …),
+and, for the fork, the simulated `smartcard` package that stands in for pyscard.
+Stock's zip carries no `smartcard` package, because stock has no code that could
+import one. The zip is fetched and unpacked into Pyodide's in-memory filesystem
+at `/wallet`, which becomes the working directory.
 
 The three `browser_*.py` shims are **not** in the zip. They are fetched separately
 and written into `/wallet` at boot, so the zip stays exactly what the build script
@@ -428,6 +434,21 @@ Raspberry Pi. These are small, but each one is a hard failure without it:
   `BackgroundImportThread` is the named exception: the controller blocks waiting
   for it to set up storage, and without it the wallet hangs forever after the
   splash.
+- **No timers either, and so no locks worth the name.** `threading.Timer` runs
+  its callback inline on `start()`, which is the only way it will ever run: the
+  wallet's one Timer is `Settings.save()`'s debounced write, and without it every
+  settings change ends on a System Error. But running it inline runs it inside
+  the lock `save()` is holding while it schedules it, and one thread taking a
+  plain `Lock` twice waits for itself forever, which wedged the wallet after the
+  change had already been stored. There is one thread here, so the only acquire
+  that can block is a thread blocking on itself; `threading.Lock` is therefore
+  the reentrant one.
+- **Testnet, not mainnet.** Settings comes up on whatever `settings.json` holds,
+  so the boot shim writes `network: T` there next to the display config, before
+  the wallet reads it. Configuration rather than a patch: it is the file a
+  configured device would have, `seedsigner/` is untouched, and Mainnet is still
+  in Settings > Advanced > Bitcoin network where it always was. What changes is
+  where a visitor starts, not what they can reach.
 - **`pycryptodomex` is `pycryptodome` under another name.** A meta path finder
   maps `Cryptodome.*` onto `Crypto.*`.
 - **`hashlib.pbkdf2_hmac` does not exist.** It lives in `_hashlib`, the OpenSSL
@@ -457,10 +478,12 @@ the flag, `js_log` builds nothing and posts nothing.
    will ever receive, because after this it is inside Python.
 3. The worker loads Pyodide, then the three binary packages it needs: Pillow,
    pycryptodome, cryptography.
-4. It fetches `wallet.zip` and unpacks it to `/wallet`, then fetches the three
-   `browser_*.py` shims and writes them alongside.
-5. It runs the boot shim: display config, threads, crypto aliases, the display
-   driver, the button patches, the camera, the QR pump, the card tray.
+4. It fetches the wallet zip for the firmware the page asked for and unpacks it
+   to `/wallet`, then fetches the three `browser_*.py` shims and writes them
+   alongside.
+5. It runs the boot shim: settings (display config and network), threads, crypto
+   aliases, the display driver, the button patches, the camera, the QR pump, and
+   under the fork the card tray.
 6. It calls `Controller.get_instance().start()` (upstream's own entry point),
    which blocks for the lifetime of the worker.
 

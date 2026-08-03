@@ -1,16 +1,22 @@
 # SeedSigner simulator
 
 [![try it live](https://img.shields.io/badge/try%20it-live-f7931a?style=flat-square)](https://bitsaga.be/seedsigner-simulator/)
-[![wallet](https://img.shields.io/badge/wallet-SeSi--0.8.7%2BShSi--B11-blue?style=flat-square)](UPSTREAM)
+[![smartcard fork](https://img.shields.io/badge/smartcard%20fork-SeSi--0.8.7%2BShSi--B11-blue?style=flat-square)](UPSTREAM)
+[![stock](https://img.shields.io/badge/stock-0.8.7-blue?style=flat-square)](UPSTREAM)
 [![reproducible-build](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/reproducible-build.yml?branch=main&label=reproducible%20build&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml)
 [![tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/test.yml)
 [![upstream tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/upstream-tests.yml?branch=main&label=upstream%20tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml)
 [![release](https://img.shields.io/github/v/release/bitsagarob/seedsigner-sim?style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/releases/latest)
 [![licence](https://img.shields.io/github/license/bitsagarob/seedsigner-sim?style=flat-square)](LICENSE)
 
-The real [SeedSigner](https://seedsigner.com) firmware, the actual Python from the
-device, running in a browser tab. Its screen is a canvas, its buttons are your
-keyboard, and its camera is your webcam.
+Real [SeedSigner](https://seedsigner.com) device firmware, the actual Python off
+the device, running in a browser tab. Its screen is a canvas, its buttons are
+your keyboard, and its camera is your webcam.
+
+Two firmwares are built, and the page says which one it is running and switches
+between them: **stock SeedSigner**, which is what a plain SeedSigner runs, and
+the **3rdIteration smartcard fork**, a third party fork that adds SeedKeeper and
+Satochip support and is what this page runs by default.
 
 > **This is a simulator, not a wallet.**
 > Everything it does happens in a browser tab, on a general-purpose computer, with
@@ -28,7 +34,7 @@ and doing the same work.
 
 That is an easy thing to say and a hard thing to believe, which is why most of
 what follows is about making it checkable rather than asking you to take it on
-trust. The copy here is tied to one specific published release of the device
+trust. Each firmware here is tied to one specific published release of the device
 software (a git tag, not a moving branch), rather than to whatever happened to be
 newest. Anyone can rebuild the file this site serves and get one that is
 identical, byte for byte (a reproducible build, compared by sha256 hash), and a
@@ -53,9 +59,9 @@ python3 test/serve.py --port 8770 src/web src/shims build/out
 Then open <http://127.0.0.1:8770/>.
 
 Neither fetched artefact is committed: Pyodide is 26 MB of someone else's release,
-and `wallet.zip` is built rather than shipped so that what you run is provably the
-pinned commit and not something a maintainer pasted in. Both steps verify what they
-download before using it.
+and the wallet zips are built rather than shipped so that what you run is provably
+the pinned commit and not something a maintainer pasted in. Both steps verify what
+they download before using it.
 
 The two headers that server sends are not optional: without cross-origin isolation
 the page cannot use `SharedArrayBuffer` and the wallet never starts.
@@ -65,32 +71,45 @@ load the page runs offline.
 Arrow keys move, Enter selects, `1` `2` `3` are the three side buttons. You can
 also click the buttons on the device.
 
+The page opens on the smartcard fork. The **Firmware** control under the device
+switches to stock and back, and `?firmware=stock` is a link straight to it.
+
 ## What it is, and how to verify it
 
-- **It is the firmware, not a re-creation.** `wallet.zip` holds the upstream Python
-  tree and the wallet's own `Controller.start()` runs it. Menus, seed handling,
-  PSBT parsing, QR encoders: all theirs, unmodified.
-- **Nothing patches the wallet.** The four places it reaches for hardware are
-  replaced from the outside, by the modules in [`src/shims/`](src/shims). That is
-  the one claim worth checking rather than believing.
-- **Pinned to a release, not a branch tip.** [`UPSTREAM`](UPSTREAM) names the tag
-  `SeSi-0.8.7+ShSi-B11` (`662d9dba…`), the same tag the official pi0-smartcard
-  device image is built from, so this and a physical device run the same code. A
-  branch tip can be rebased out from under a pin; a tag cannot.
-- **You can rebuild it and compare.** `build/build-wallet-zip.sh` reproduces
-  `wallet.zip` byte for byte: fixed timestamps, fixed order, no build host in the
-  output. If your hash matches the file a page served you, what you ran was the
-  pin, its pinned dependencies and this repository's simulated card, and nothing
-  else.
-- **A machine re-derives that hash on every push**, on a runner that has never seen
-  this repository and shares no cache with anything, and GitHub signs the result:
-  `gh attestation verify wallet.zip --repo bitsagarob/seedsigner-sim`.
-- **Upstream's own tests run against our pinned versions.** CI clones SeedSigner's
-  22,000-line suite from the same commit and runs 949 of its tests
-  ([`upstream-tests.yml`](.github/workflows/upstream-tests.yml)); nothing is
-  vendored and none of it goes near `wallet.zip`. One file of 50 is not collected:
-  it is hardware-in-the-loop, wants a physical card reader, and skips itself
-  entirely without one.
+- **It is the firmware, not a re-creation.** `wallet-<firmware>.zip` holds that
+  firmware's upstream Python tree and the wallet's own `Controller.start()` runs
+  it. Menus, seed handling, PSBT parsing, QR encoders: all theirs, unmodified.
+- **Nothing patches the wallet.** The places it reaches for hardware are replaced
+  from the outside, by the modules in [`src/shims/`](src/shims): four of them in
+  the fork, three in stock, which has no cards to reach for. That is the one
+  claim worth checking rather than believing.
+- **What is configured is configured, not patched.** The simulator comes up on
+  Testnet, where SeedSigner's own default is Mainnet, because nothing that runs
+  in a browser tab should start out pointed at real coins. That is a value
+  written into the `settings.json` the device reads at boot, the way a configured
+  device would have it, and Mainnet is still in Settings > Advanced > Bitcoin
+  network exactly as on hardware.
+- **Pinned to a release, not a branch tip.** [`UPSTREAM`](UPSTREAM) has a section
+  per firmware. Stock is SeedSigner's own tag `0.8.7` (`e0a80d4b…`). The fork is
+  3rdIteration's `SeSi-0.8.7+ShSi-B11` (`662d9dba…`), which is also the tag the
+  official pi0-smartcard device image is built from, so the fork here and that
+  physical device run the same code; stock makes no such claim, because there is
+  no such image. A branch tip can be rebased out from under a pin; a tag cannot.
+- **You can rebuild either and compare.** `build/build-wallet-zip.sh` reproduces
+  a wallet zip byte for byte: fixed timestamps, fixed order, no build host in the
+  output. If your hash matches the file a page served you, what you ran was that
+  firmware's pin, its pinned dependencies and this repository's stand-ins, and
+  nothing else.
+- **A machine re-derives both hashes on every push**, on a runner that has never
+  seen this repository and shares no cache with anything, and GitHub signs the
+  result:
+  `gh attestation verify wallet-smartcard.zip --repo bitsagarob/seedsigner-sim`.
+- **Upstream's own tests run against our pinned versions**, both firmwares, each
+  against its own pin ([`upstream-tests.yml`](.github/workflows/upstream-tests.yml)):
+  949 tests from the fork's 22,000-line suite, and the whole of stock's smaller
+  one. Nothing is vendored and none of it goes near a wallet zip. One file of the
+  fork's, 50 tests of it, is not collected: it is hardware-in-the-loop, wants a
+  physical card reader, and skips itself entirely without one.
 - **The webcam really is the camera.** Same `DecodeQR`, same SeedQR / CompactSeedQR
   / PSBT / UR parsing the device does. Only the decoder underneath is the
   browser's, because there is no zbar in WebAssembly.
@@ -100,14 +119,21 @@ also click the buttons on the device.
 
 > If the zip hashes differ but the **contents** hash matches, the two builds hold
 > the same files and differ only in compression: some distributions ship zlib-ng.
-> That is packaging, not code; `wallet.zip.manifest` lists a sha256 per file.
+> That is packaging, not code; the zip's `.manifest` lists a sha256 per file.
 
 ## What works, and what does not
 
-**Works**
+Everything about cards below is the smartcard fork's, because cards are what the
+fork adds. Stock SeedSigner has no card code at all, so under stock there is no
+card tray on the page: none of it is missing there, it was never there.
+
+**Works, on either firmware**
 
 - The full menu tree, seed loading by QR or by hand, passphrases, xpub export,
   PSBT loading and signing, SeedQR backup, settings, every screen that draws a QR.
+
+**Works, on the smartcard fork**
+
 - Three card slots. Each holds a **SeedKeeper** or a **Satochip**: your choice
   before you insert it, SeedKeeper by default, since that is the card the device
   ships with. Either takes a PIN and checks it.
@@ -116,7 +142,19 @@ also click the buttons on the device.
 - **Satochip:** holds a real BIP32 master key and a real authentikey, and
   pysatochip verifies every answer it signs.
 
-**Does not**
+**Does not, on either firmware**
+
+- **microSD.** No slot to emulate, so settings reset on reload and the firmware
+  update flows do not happen.
+- **Anything drawn from a background thread.** No threads here: no spinner, no
+  scrolling long text, no pulsing warning border. The two animations that carry
+  information (camera preview, animated QR) are pumped by hand. Thread-based
+  work such as brute-force address verification never completes.
+- **Timing-based behaviour.** No wipe timer, no screensaver, no battery readings.
+- **Real security properties.** A browser tab is not an air gap, and Pyodide's
+  filesystem is not a secure element.
+
+**Does not, on the smartcard fork**
 
 - **"Initialise with Seed" on the Satochip side: upstream's bug, not ours.**
   `ToolsSatochipImportSeedView` unpacks three values from
@@ -138,20 +176,12 @@ also click the buttons on the device.
   card-management screens: all answer "not supported".
 - **Cards that remember.** State is in memory only, so a reload gives factory-fresh
   cards. Deliberate: nothing you do here should outlive the tab.
-- **microSD.** No slot to emulate, so settings reset on reload and the firmware
-  update flows do not happen.
-- **Anything drawn from a background thread.** No threads here: no spinner, no
-  scrolling long text, no pulsing warning border. The two animations that carry
-  information (camera preview, animated QR) are pumped by hand. Thread-based
-  work such as brute-force address verification never completes.
-- **Timing-based behaviour.** No wipe timer, no screensaver, no battery readings.
-- **Real security properties.** A browser tab is not an air gap, and Pyodide's
-  filesystem is not a secure element.
 
 ## How it works
 
 The wallet's Python runs under [Pyodide](https://pyodide.org) (CPython compiled to
-WebAssembly) inside a Web Worker. Four hardware seams are replaced:
+WebAssembly) inside a Web Worker. Four hardware seams are replaced, three of them
+under stock, which has no smartcard code to reach for the fourth:
 
 | Seam | Replaced by | Why |
 | --- | --- | --- |

@@ -54,7 +54,52 @@
     max-width: 60ch; border: 1px solid #4a3d22; background: #211b10;
     border-radius: 8px; padding: .5rem .9rem;
   }
+  .note { color: #9aa3ae; font-size: .9em; text-align: center; margin: 0; max-width: 60ch; }
+  .note a { color: #f7931a; }
   .hint a { color: #7c848f; }
+  /* What is running, said next to the device rather than in the panel behind
+     the i, because someone who follows a shared link should not have to hunt
+     for it. */
+  #running {
+    display: flex; flex-direction: column; align-items: center; gap: .5rem;
+    max-width: 100%; font-size: .9em;
+  }
+  #running p { margin: 0; color: #9aa3ae; text-align: center; }
+  .running-row {
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: center; gap: .5rem .9rem;
+  }
+  /* The firmware control, in the card tray's idiom: a plain two-way switch and
+     nothing shaped like a card or a slot, because this page says microSD is not
+     emulated and a slot to push something into would promise otherwise. */
+  #firmware-switch { display: flex; align-items: center; gap: .35rem; }
+  #firmware-switch .label { color: #7c848f; }
+  #firmware-switch button {
+    font: inherit; color: #8b939e; background: #1d2026; border: 1px solid #2a2e35;
+    border-radius: 5px; padding: .2rem .6rem; cursor: pointer;
+  }
+  #firmware-switch button:hover { color: #d7dbe0; border-color: #3a3f47; }
+  #firmware-switch button[aria-pressed=true] {
+    color: #f7931a; border-color: #f7931a; background: #16181c; cursor: default;
+  }
+  #firmware-switch button:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
+  /* Empty until the wallet has said what its own settings hold. The page keeps
+     no copy of this to fall back on, and a guess here would be wrong exactly
+     when it matters. */
+  #network:empty { display: none; }
+  /* Mainnet is where a visitor has to have gone deliberately, through the
+     device's own menu, so the page stops behaving like a tutorial when they
+     do: the invitation to our test network goes away and the warning gets
+     louder. Nothing here invites anyone towards mainnet. */
+  body.mainnet #network {
+    color: #e8c07a; border: 1px solid #4a3d22; background: #211b10;
+    border-radius: 6px; padding: .05rem .55rem;
+  }
+  body.mainnet .note { display: none; }
+  body.mainnet .warn { color: #f3c08a; border-color: #7b4a1e; background: #2b1a09; }
+  /* Stock SeedSigner has no smartcard code at all, so under it the tray is
+     never built and this leaves no gap behind. */
+  #cardtray:empty { display: none; }
   @media (max-width: 30rem) {
     body { padding: 1rem .75rem; gap: .75rem; }
     h1 { font-size: 1.05rem; }
@@ -68,9 +113,12 @@
     <details id="about">
       <summary aria-label="How this works" title="How this works">i</summary>
       <div>
-        <p><strong>This is the real SeedSigner firmware</strong>, running in this tab.
-        Its Python is executed by Pyodide (CPython compiled to WebAssembly) inside a
-        Web Worker. The wallet code itself is unmodified; only the four places it
+        <p><strong>This is device firmware, not a re-creation of it</strong>: the
+        actual Python that runs on a SeedSigner, in this tab. Two builds are on
+        offer, stock SeedSigner and the 3rdIteration smartcard fork; the control
+        under the device says which one is running and switches between them.</p>
+        <p>Its Python is executed by Pyodide (CPython compiled to WebAssembly) inside a
+        Web Worker. The wallet code itself is unmodified; only the places it
         reaches for hardware are replaced.</p>
         <ul>
           <li><strong>Display:</strong> the driver hands raw RGB frames to the page,
@@ -82,8 +130,10 @@
           codes with pyzbar, a C library with no WebAssembly build, so decoding is done
           by the browser's BarcodeDetector or by jsQR and the bytes are handed to the
           unmodified decoder.</li>
-          <li><strong>Smartcard:</strong> simulated SeedKeeper and Satochip cards that
-          answer real APDUs, because browsers have no smartcard API at all.</li>
+          <li id="about-smartcard"><strong>Smartcard:</strong> simulated SeedKeeper
+          and Satochip cards that answer real APDUs, because browsers have no
+          smartcard API at all. The smartcard fork only: stock SeedSigner has no
+          card code for them to answer.</li>
         </ul>
         <p>Nothing leaves your browser. The page declares a content security policy that
         permits no connections to any other origin, and there is no server to send anything to.</p>
@@ -99,10 +149,23 @@
   </header>
   <div id="device"></div>
   <canvas id="screen" width="320" height="240"></canvas>
+  <div id="running">
+    <div class="running-row">
+      <div id="firmware-switch" role="group" aria-label="Firmware">
+        <span class="label">Firmware</span>
+      </div>
+      <p id="network"></p>
+    </div>
+    <p id="firmware-line"></p>
+  </div>
   <p id="status">starting…</p>
   <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
   element. Never enter a seed phrase you rely on; use a public test seed, a
   throwaway phrase that holds no bitcoin and never will.</p>
+  <p class="note">This is a simulator, and it starts on Testnet, so you can use it
+  with <a href="/signet">Bitsaga Signet</a>, our own test network. These are not real
+  bitcoin. They exist only on our test network, cannot be sold or sent to anyone, and
+  are worth nothing.</p>
   <div id="cardtray"></div>
   <p class="hint"><a id="debuglink" href="?debug=1">debug</a></p>
   <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>
@@ -130,11 +193,52 @@ const FIRMWARES = ["smartcard", "stock"];
 const asked = new URLSearchParams(location.search).get("firmware");
 const FIRMWARE = FIRMWARES.includes(asked) ? asked : FIRMWARES[0];
 
+// How the page names each firmware, on the switch and in the sentence under the
+// device. Neither is called "SeedSigner" on its own: one is a third party fork
+// of it, and saying so is the whole point of naming them at all.
+const FIRMWARE_INFO = {
+  smartcard: {
+    button: "Smartcard fork",
+    says: "Running the 3rdIteration smartcard fork of SeedSigner, tag " +
+          "SeSi-0.8.7+ShSi-B11, which adds SeedKeeper and Satochip cards.",
+  },
+  stock: {
+    button: "Stock SeedSigner",
+    says: "Running stock SeedSigner 0.8.7, the firmware a plain SeedSigner " +
+          "runs. It has no smartcard support, so there is no card tray.",
+  },
+};
+
 let W = 320, H = 240;  // corrected by the worker once the renderer exists
 const canvas = document.getElementById("screen");
 const deviceEl = document.getElementById("device");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
+const networkEl = document.getElementById("network");
+
+// Say which firmware this is, in words, next to the device.
+document.getElementById("firmware-line").textContent = FIRMWARE_INFO[FIRMWARE].says;
+if (FIRMWARE !== "smartcard") document.getElementById("about-smartcard").remove();
+
+// The switch. Changing firmware reloads rather than swapping anything: the
+// worker is inside Python for the life of the page, so there is no unpacking a
+// different wallet underneath it, and the URL is the only thing that carries
+// the choice anyway.
+const switchEl = document.getElementById("firmware-switch");
+for (const name of FIRMWARES) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.firmware = name;
+  button.textContent = FIRMWARE_INFO[name].button;
+  button.setAttribute("aria-pressed", String(name === FIRMWARE));
+  button.addEventListener("click", () => {
+    if (name === FIRMWARE) return;
+    const params = new URLSearchParams(location.search);
+    params.set("firmware", name);
+    location.search = params.toString();  // sets it and reloads
+  });
+  switchEl.appendChild(button);
+}
 
 // [0] = has a key been posted, [1] = which key. The worker blocks on [0].
 const shared = new SharedArrayBuffer(8);
@@ -146,7 +250,11 @@ const cameraBuffer = CameraChannel.createBuffer();
 
 // Which of the three simulated smartcards is in the reader. Same channel,
 // same reason: the worker is blocked and cannot answer a message.
-const cardBuffer = CardTray.createBuffer();
+//
+// Smartcard fork only. Stock SeedSigner has no card code, so a tray under it
+// would be a control for something that does not exist, and no buffer is
+// allocated to carry what it would have said.
+const cardBuffer = FIRMWARE === "smartcard" ? CardTray.createBuffer() : null;
 
 // An index into BUTTON_NAMES on the Python side. This fork identifies
 // buttons by name rather than GPIO number, and the shared buffer carries ints.
@@ -222,6 +330,12 @@ if (!window.crossOriginIsolated) {
     } else if (type === "ready") {
       statusEl.textContent = "";
       statusEl.className = "ready";
+    } else if (type === "network") {
+      // The wallet's own settings, read back out of them by the worker. The
+      // page holds no copy and computes nothing: it repeats what it was told,
+      // and says nothing at all until it has been told something.
+      networkEl.textContent = "Bitcoin network: " + event.data.name;
+      document.body.classList.toggle("mainnet", event.data.mainnet);
     } else if (type === "error") {
       statusEl.textContent = "failed: " + event.data.message;
       statusEl.className = "err";
@@ -231,7 +345,7 @@ if (!window.crossOriginIsolated) {
   // The camera stays idle until the wallet asks for it, so nothing here prompts
   // for permission before the user actually chooses to scan.
   CameraChannel.runPage(cameraBuffer);
-  CardTray.runPage(cardBuffer, "cardtray");
+  if (cardBuffer) CardTray.runPage(cardBuffer, "cardtray");
 
   worker.postMessage({
     type: "init", sharedBuffer: shared, cameraBuffer, cardBuffer,

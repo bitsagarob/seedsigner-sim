@@ -29,9 +29,9 @@ downloads the Pyodide runtime and builds both wallet zips from their pinned
 upstream commits, which takes a few minutes; later runs reuse all of it.
 
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
-`tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`,
-`stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`, `cards_browser`,
-`cards_seed`, `cards_seedkeeper`, `cards_descriptor`:
+`tray_layout`, `firmware`, `settings`, `scan_seedqr`, `scan_compact`,
+`scan_native`, `stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`,
+`cards_browser`, `cards_seed`, `cards_seedkeeper`, `cards_descriptor`:
 
     python3 test/run.py scan          # everything with "scan" in the name
     python3 test/run.py stock         # the three stock-firmware scans
@@ -39,7 +39,9 @@ A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
 The three scan tests run once per firmware: the smartcard fork the simulator has
 always run, and stock SeedSigner. The card tests are smartcard only, because the
 menus they drive do not exist in stock. `SIM_FIRMWARE` picks the firmware for a
-single test file run by hand.
+single test file run by hand; `test_firmware.py` ignores it and visits both by
+name, because switching between them is what it is about.
+
     python3 test/run.py leak          # just the leak scanner
     python3 test/run.py cards tray    # the smartcard side only
 
@@ -94,6 +96,26 @@ at a narrow viewport with no horizontal scrollbar, the accent and lift that show
 which card is in, one card in the reader at a time, and Enter on a focused card
 inserting it *without* also reaching the wallet's key handler underneath.
 
+**`test_firmware.py`**: the firmware switch, and what the page claims while it is
+on each one. Two firmwares are built and the page runs one of them, which decides
+what it can honestly show: the sentence under the device has to name the running
+firmware and call the fork a fork, the switch has to actually come back on the
+other one with the rest of the query string intact, and the card tray has to be
+**absent** under stock rather than disabled or greyed, because stock has no card
+code for a tray to control. Nothing here waits for the wallet to boot, so it
+costs seconds.
+
+**`test_settings.py`**: a setting changed through the wallet's own menus, and the
+network indicator that follows it. It exists because changing a setting did not
+work and nothing here noticed: `Settings.save()` debounces its write behind a
+`threading.Timer`, the worker shimmed `Thread` but not `Timer`, and every change
+died on a System Error. Then, once the Timer ran inline, it ran inside the lock
+`save()` holds while scheduling it and the wallet wedged after storing the value,
+which is why one of the checks is that the wallet drew again afterwards. It also
+pins the starting network down: a fresh page comes up on **Testnet**, which is
+`settings.json` and not a patch, and going to Mainnet through Settings > Advanced
+is what makes the page say so loudly and stop offering our own test network.
+
 **`test_scan.py`**: the whole scan path against Chromium's fake camera, run
 twice. `qr.y4m` is the digit-based SeedQR; `qr-compact.y4m` is the raw-bytes
 CompactSeedQR, which is the case that breaks first if any layer decides a payload
@@ -116,12 +138,12 @@ inventing keys, which is the worst thing a bitcoin-adjacent tool can do. The
 second phase then holds up a real CompactSeedQR and requires the correct seed
 anyway, because jsQR re-reads the frame for its actual bytes.
 
-**`run.py`'s `same_seed` step**: after the scan tests, the screen each of the
-three runs ended on is compared byte for byte with the other two, and then with a
-committed baseline. One seed, encoded three ways and read down two different
-decoder paths, must end on one rendered fingerprint. It has been identical across
-every run so far, including runs against differently built `wallet.zip` files, so
-a difference means something real changed.
+**`run.py`'s `same_seed` step**, once per firmware: after the scan tests, the
+screen each of that firmware's three runs ended on is compared byte for byte with
+the other two, and then with a committed baseline. One seed, encoded three ways
+and read down two different decoder paths, must end on one rendered fingerprint.
+It has been identical across every run so far, including runs against differently
+built wallet zips, so a difference means something real changed.
 
 What is compared is `scan-screen-*.png`: the 320x240 canvas SeedSigner's own
 renderer drew, read back out of the canvas rather than photographed. The
@@ -135,15 +157,22 @@ differing by one channel value at an antialiased corner of the warning box while
 the device area was byte-identical.
 
 Agreeing with each other is not enough; three runs of a wallet that derived the
-seed wrongly would agree perfectly. `baseline/screen-b2269592.png` is the anchor:
-the same capture, of `SeedFinalizeScreen` showing the BIP39 test vector's master
-fingerprint `b2269592`. It is committed as a picture rather than as a digest so
-that the anchor can be audited by opening it. Regenerate it only when the wallet
-is meant to draw something different, or when the Chromium that encodes the PNG
-changes underneath it:
+seed wrongly would agree perfectly. The anchor is a committed capture of
+`SeedFinalizeScreen` showing the BIP39 test vector's master fingerprint
+`b2269592`, and there is one per firmware because the two draw that screen
+differently: stock offers one passphrase button where the fork offers three, so
+the images can never be the same and a single baseline could only ever be
+satisfied by one of them. The seed behind both is the same seed, and the
+fingerprint on both is `b2269592`. Both are committed as pictures rather than as
+digests so that the anchor can be audited by opening it. Regenerate one only when
+the wallet is meant to draw something different, or when the Chromium that
+encodes the PNG changes underneath it:
 
     python3 test/run.py scan
     cp test/artifacts/scan-screen-qr.png test/baseline/screen-b2269592.png
+
+    python3 test/run.py stock_scan
+    cp test/artifacts/stock-scan-screen-qr.png test/baseline/stock-screen-b2269592.png
 
 and look at the file before committing it. A baseline nobody read anchors
 nothing.
