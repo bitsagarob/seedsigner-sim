@@ -111,7 +111,7 @@ every artifact it fetches.
 **SeedSigner — MIT**
 
 * Repository: https://github.com/3rdIteration/seedsigner
-* Commit: `f6e79ba098558ec4ec05326a4fcbfb7b429760ea` (branch `dev`)
+* Commit: `662d9dba2327eb77d6924ae9bd62d4902bf24634` (tag `SeSi-0.8.7+ShSi-B11`)
 * In the zip as: `seedsigner/`, `main.py`, `LICENSE.md`
 
 Verbatim, byte for byte, from `src/seedsigner` and `src/main.py` at that commit.
@@ -122,7 +122,7 @@ To check the copy in a built zip against upstream directly:
 
 ```
 git clone https://github.com/3rdIteration/seedsigner.git upstream
-git -C upstream checkout f6e79ba098558ec4ec05326a4fcbfb7b429760ea
+git -C upstream checkout 662d9dba2327eb77d6924ae9bd62d4902bf24634
 mkdir extracted && cd extracted && unzip -q ../wallet.zip && cd ..
 diff -rq upstream/src/seedsigner extracted/seedsigner
 ```

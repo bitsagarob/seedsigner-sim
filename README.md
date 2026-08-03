@@ -46,13 +46,18 @@ menus, the seed handling, the PSBT parsing, the QR encoders: all theirs, unmodif
 
 **You can check that for yourself.** The wallet is pinned in
 [`UPSTREAM`](UPSTREAM) to a single commit of
-[3rdIteration/seedsigner](https://github.com/3rdIteration/seedsigner)
-(`f6e79ba098558ec4ec05326a4fcbfb7b429760ea`), and `build/build-wallet-zip.sh`
-rebuilds `wallet.zip` from it reproducibly — fixed timestamps, fixed order, no
-build host anywhere in the output. So you can rebuild it yourself and compare the
-sha256 against the `wallet.zip` a page just served you. If they match, what you
-ran was the pinned upstream tree plus its pinned dependencies plus this
-repository's simulated smartcard package, and nothing else.
+[3rdIteration/seedsigner](https://github.com/3rdIteration/seedsigner), the release
+tag `SeSi-0.8.7+ShSi-B11` (`662d9dba2327eb77d6924ae9bd62d4902bf24634`), and
+`build/build-wallet-zip.sh` rebuilds `wallet.zip` from it reproducibly — fixed
+timestamps, fixed order, no build host anywhere in the output. So you can rebuild
+it yourself and compare the sha256 against the `wallet.zip` a page just served
+you. If they match, what you ran was the pinned upstream tree plus its pinned
+dependencies plus this repository's simulated smartcard package, and nothing else.
+
+A released tag rather than a branch tip, for two reasons: a tip can be rebased out
+from under the pin, leaving a sha nobody can fetch any more, and that tag is the
+one the official pi0-smartcard device image is built from — so the code here and
+the code on a physical device are the same code.
 
 If the zip hashes differ but the *contents* hash printed alongside matches, the
 two builds hold the same files and differ only in compression — some
