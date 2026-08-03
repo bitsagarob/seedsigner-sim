@@ -93,8 +93,16 @@ trap 'rm -rf -- "${WORK_DIR}"' EXIT
 # What has to be there
 # ---------------------------------------------------------------------------
 #
-# This is the deploy table in docs/SELF-HOSTING.md, written so a machine can
-# check it. Columns, pipe-separated:
+# This is the deploy table in docs/SELF-HOSTING.md, worked out rather than
+# written down. It used to be a hardcoded list, and on the day four files were
+# added to src/web it went on checking the fifteen it knew about: they were
+# served, and this said everything was fine. A check that silently ignores a new
+# file is the failure it exists to prevent, so the set is derived from the same
+# three places a deploy copies from -- src/web, src/shims, and one zip and one
+# build-info per firmware in UPSTREAM. Add a file to src/web and it is checked;
+# add a third firmware to UPSTREAM and it is checked; nobody edits this script.
+#
+# Columns, pipe-separated:
 #
 #   served    the path under the site URL
 #   source    what in this repository it must equal, if anything
@@ -107,46 +115,67 @@ trap 'rm -rf -- "${WORK_DIR}"' EXIT
 #                       repository; it still has to be there, its references
 #                       still have to resolve, and the boxes still have to agree
 #
-# index.html is the one `local` row. bitsaga.be serves its own landing page
-# there, on purpose, and a check that failed on that forever would be a check
-# nobody reads. Everything the wallet itself loads is `repo`: a customised one
-# of those is not a re-skin, it is a different simulator.
+# index.html is the one `local` row, and stays one however this list is derived.
+# bitsaga.be serves its own landing page there, on purpose, and a check that
+# failed on that forever would be a check nobody reads. Everything the wallet
+# itself loads is `repo`: a customised one of those is not a re-skin, it is a
+# different simulator.
+#
+# src/web/pyodide is skipped for the reason in the header: 26 MB per box of
+# somebody else's release, hash-checked where it is fetched, and an absent one
+# shows up in question 3 anyway.
 
-FILES='
-index.html|src/web/index.html|local
-wallet.html|src/web/wallet.html|repo
-wallet-worker.js|src/web/wallet-worker.js|repo
-wallet-camera.js|src/web/wallet-camera.js|repo
-wallet-cards.js|src/web/wallet-cards.js|repo
-wallet-tutorial.js|src/web/wallet-tutorial.js|repo
-signet-coordinator.js|src/web/signet-coordinator.js|repo
-qr-encode.js|src/web/qr-encode.js|repo
-ur-decode.js|src/web/ur-decode.js|repo
-seedsigner-device.js|src/web/seedsigner-device.js|repo
-jsQR.js|src/web/jsQR.js|repo
-sw.js|src/web/sw.js|repo
-manifest.json|src/web/manifest.json|repo
-icon-192.png|src/web/icon-192.png|repo
-icon-512.png|src/web/icon-512.png|repo
-apple-touch-icon.png|src/web/apple-touch-icon.png|repo
-browser_display.py|src/shims/browser_display.py|repo
-browser_camera.py|src/shims/browser_camera.py|repo
-browser_qr.py|src/shims/browser_qr.py|repo
-wallet-smartcard.zip|smartcard|upstream
-wallet-stock.zip|stock|upstream
-wallet-smartcard.build-info.json|build/out/wallet-smartcard.build-info.json|repo
-wallet-stock.build-info.json|build/out/wallet-stock.build-info.json|repo
-'
+UPSTREAM_FILE="${REPO_ROOT}/UPSTREAM"
+[ -f "${UPSTREAM_FILE}" ] || { echo "missing ${UPSTREAM_FILE}" >&2; exit 2; }
 
-# The served files whose own references are followed. HTML and the scripts the
-# page loads; not jsQR.js, which is a quarter of a megabyte of minified vendor
-# code and names nothing.
-SCAN='index.html wallet.html wallet-worker.js wallet-camera.js wallet-cards.js wallet-tutorial.js signet-coordinator.js seedsigner-device.js sw.js'
+# The firmwares are the UPSTREAM sections that publish a wallet zip hash. That is
+# what makes a section a firmware this repository builds and serves: the two
+# applet sections below them pin references nothing here builds, and would
+# otherwise be asked for as zips that do not exist.
+FIRMWARES="$(awk -F= '
+    /^\[/ { section = $0; sub(/^\[/, "", section); sub(/\].*$/, "", section); next }
+    $1 ~ /^[[:space:]]*wallet_zip_sha256[[:space:]]*$/ { print section }
+' "${UPSTREAM_FILE}" | tr '\n' ' ')"
+[ -n "${FIRMWARES}" ] || { echo "no firmware sections in ${UPSTREAM_FILE}" >&2; exit 2; }
 
-# The zips and the build-info files are fetched by name per firmware, and the
-# page builds those names in a template literal, so a reference extracted from
-# it still has the placeholder in it.
-FIRMWARES='smartcard stock'
+FILES=""
+add_file() { FILES="${FILES}$1|$2|$3
+"; }
+
+# Everything under src/web, at whatever depth, minus the Pyodide runtime. The
+# served path is the path below src/web, because that is what `cp -r src/web/.`
+# puts in the document root.
+while IFS= read -r file; do
+    rel="${file#"${REPO_ROOT}/src/web/"}"
+    case "${rel}" in
+        index.html) add_file "${rel}" "src/web/${rel}" local ;;
+        *)          add_file "${rel}" "src/web/${rel}" repo ;;
+    esac
+done < <(find "${REPO_ROOT}/src/web" -path "${REPO_ROOT}/src/web/pyodide" -prune -o \
+              -type f -print | LC_ALL=C sort)
+
+# The shims, which are copied flat next to the page and fetched by name at boot.
+while IFS= read -r file; do
+    add_file "${file##*/}" "src/shims/${file##*/}" repo
+done < <(find "${REPO_ROOT}/src/shims" -type f -name '*.py' | LC_ALL=C sort)
+
+# And the build output, one zip and one build-info per firmware.
+for fw in ${FIRMWARES}; do
+    add_file "wallet-${fw}.zip" "${fw}" upstream
+    add_file "wallet-${fw}.build-info.json" "build/out/wallet-${fw}.build-info.json" repo
+done
+
+# The served files whose own references are followed: the HTML and the scripts
+# the page loads, which is every served .html and .js except jsQR.js -- a quarter
+# of a megabyte of minified vendor code that names nothing, so scanning it buys
+# nothing and costs a fetch of it from every box.
+SCAN=""
+while IFS='|' read -r served source mode; do
+    case "${served}" in
+        ''|jsQR.js)  continue ;;
+        *.html|*.js) SCAN="${SCAN}${served} " ;;
+    esac
+done <<< "${FILES}"
 
 # ---------------------------------------------------------------------------
 # Talking to a box
@@ -201,9 +230,6 @@ short() { printf '%.12s' "$1"; }
 # ---------------------------------------------------------------------------
 # What this repository says
 # ---------------------------------------------------------------------------
-
-UPSTREAM_FILE="${REPO_ROOT}/UPSTREAM"
-[ -f "${UPSTREAM_FILE}" ] || { echo "missing ${UPSTREAM_FILE}" >&2; exit 2; }
 
 # Section-aware, and the same awk program as build/build-wallet-zip.sh: UPSTREAM
 # describes two firmwares and a parser that ignored the headers would hand back
