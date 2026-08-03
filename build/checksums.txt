@@ -58,9 +58,9 @@ c2165a719265ede7e6fd6195d6950f1c6c99bc01aef78431c6d4b0c1f8a825a3  src/web/sw.js
 8ebcff9584adbbeb8d60ff6d1075e11c2dbc2d8546523cbaef031eaed44dd3c6  src/web/ur-decode.js
 e904431719d48c07b0f0b203ef9218b0482c03e1c658a03e4fa2f829b323a13d  src/web/wallet-camera.js
 31353308f7ae62967fa4ac63da72de8fca1553e2fd3c815281f7d47487abf15c  src/web/wallet-cards.js
-af5c905725f32115646b9ba50d1d1fca7812f726ccb50b45c470ba816bf1a4ec  src/web/wallet-tutorial.js
+10c41b4ea52d0be6152c784308f865526fc8691c133d95a0b8639d5c04f86072  src/web/wallet-tutorial.js
 8ca3f7f59fd74d739615aa4eaa998535d21a6a199076c5b5175f88f4c639ad40  src/web/wallet-worker.js
-ed82dcb9f1a1699ffa0a3fd6599bb0f83b35f53843e6c0681dec6d46d337361e  src/web/wallet.html
+c7c6ed964dad2fe46259b2920bf5f05077da8d0f3caeb87e749dfcc9b068b3b3  src/web/wallet.html
 
 # The stand-in packages, which build/build-wallet-zip.sh copies out of the working
 # tree and into a wallet zip whole. Every other input to that zip is pinned by a

@@ -23,8 +23,17 @@
     display: flex; flex-direction: column; align-items: center; gap: 1rem;
   }
   /* Everything is width-bounded: the device is landscape and wider than a
-     phone, so it scales rather than overflowing. */
-  h1, #status, .hint { max-width: 100%; text-align: center; }
+     phone, so it scales rather than overflowing.
+
+     One measure for the words and the controls, so a wide screen does not
+     spread a sentence across the whole of itself: everything textual is bounded
+     to the same column and centred in it, and the device alone keeps the wider
+     bound below. 46rem because that is what the details panel and the tutorial
+     panel are already, so the column has one edge rather than three. */
+  h1, #status, .hint, .warn, .note, #running, #build {
+    max-width: min(46rem, 100%);
+  }
+  h1, #status, .hint { text-align: center; }
   #device { width: 100%; }
   #screen {
     display: block; width: 100%; height: 100%;
@@ -33,7 +42,7 @@
   #status { color: #7c848f; min-height: 0; }
   #status:empty { display: none; }
   header { display: flex; align-items: center; gap: .5rem; }
-  h1 { font-size: 1.2rem; margin: 0; font-weight: 600; }
+  h1 { font-size: 1.6rem; margin: 0; font-weight: 600; }
   #about > summary {
     list-style: none; cursor: pointer; width: 1.35rem; height: 1.35rem;
     border-radius: 50%; border: 1px solid #3a4048; color: #9aa3ae;
@@ -55,18 +64,24 @@
   .hint { color: #7c848f; font-size: .9em; }
   .warn {
     color: #e8c07a; font-size: .9em; text-align: center; margin: 0;
-    max-width: 60ch; border: 1px solid #4a3d22; background: #211b10;
+    border: 1px solid #4a3d22; background: #211b10;
     border-radius: 8px; padding: .5rem .9rem;
   }
-  .note { color: #9aa3ae; font-size: .9em; text-align: center; margin: 0; max-width: 60ch; }
+  /* The half of the warning that is only true of mainnet. The risk of typing a
+     real seed into a browser tab is not about the network, so that sentence is
+     always up; what mainnet adds is that this page then holds the correct
+     mainnet keys, and that part appears only where it applies. */
+  .mainnet-only { display: none; }
+  body.mainnet .mainnet-only { display: inline; }
+  .note { color: #9aa3ae; font-size: .9em; text-align: center; margin: 0; }
   .note a { color: #f7931a; }
   .hint a { color: #7c848f; }
-  /* What is running, said next to the device rather than in the panel behind
-     the i, because someone who follows a shared link should not have to hunt
-     for it. */
+  /* Which firmware and which network, under the device: the two things about
+     what is running that are a control or that change while you watch. What
+     they are, in words, is said in the details panel above. */
   #running {
     display: flex; flex-direction: column; align-items: center; gap: .5rem;
-    max-width: 100%; font-size: .9em;
+    font-size: .9em;
   }
   #running p { margin: 0; color: #9aa3ae; text-align: center; }
   .running-row {
@@ -87,10 +102,10 @@
     color: #f7931a; border-color: #f7931a; background: #16181c; cursor: default;
   }
   #firmware-switch button:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
-  /* The details panel, opened from under the firmware line it is about. Same
-     idiom as the switch above it and the card tray below: dark fill, thin
-     border, and Bitcoin orange only where something is on or has come out
-     right. */
+  /* The details panel, above the device with the warning, so that what the page
+     claims about itself is offered before the thing it is about. Same idiom as
+     the firmware switch and the card tray: dark fill, thin border, and Bitcoin
+     orange only where something is on or has come out right. */
   #build { width: 100%; text-align: center; font-size: .9em; }
   #build > summary {
     list-style: none; display: inline-block; cursor: pointer;
@@ -110,6 +125,9 @@
     padding: 1rem 1.25rem; color: #b6bec8;
   }
   #build a { color: #f7931a; }
+  /* What is running, in a sentence, at the top of the panel where the rest of
+     the same material lives. */
+  #firmware-line { margin: 0 0 1rem; }
   #build h3 { font-size: 1em; font-weight: 600; color: #d7dbe0; margin: 1.2rem 0 .5rem; }
   #build dl {
     display: grid; grid-template-columns: max-content 1fr; gap: .35rem .9rem; margin: 0;
@@ -210,7 +228,7 @@
   body.solo #fullscreen { position: fixed; z-index: 60; top: .4rem; right: .4rem; }
   @media (max-width: 30rem) {
     body { padding: 1rem .75rem; gap: .75rem; }
-    h1 { font-size: 1.05rem; }
+    h1 { font-size: 1.3rem; }
     .hint { font-size: .82em; }
     /* Two columns of a 64-character hash do not fit a phone. */
     #build dl { grid-template-columns: 1fr; gap: 0; }
@@ -260,39 +278,40 @@
         <p>Source, and a build script that rebuilds this wallet from a pinned
         upstream commit so you can check the claim above yourself:
         <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">seedsigner-sim</a>.
-        <strong>Technical details</strong>, under the device, has the pin, both
+        <strong>Technical details</strong>, above the device, has the pin, both
         published hashes and everything the wallet zip carries.
         The device firmware lives in
         <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">seedsigner-os</a>.</p>
       </div>
     </details>
   </header>
-  <!-- Above the device, so it is the first thing read and then scrolls out of
-       the way, rather than competing with the device for room underneath it. -->
-  <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
-  element. Never enter a seed phrase you rely on; use a public test seed, a
-  throwaway phrase that holds no bitcoin and never will.</p>
-  <div id="device"></div>
-  <canvas id="screen" width="320" height="240"></canvas>
-  <!-- Only offered where it is any use: on a phone, where the page around the
-       device is what is making the device small. -->
-  <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
-  <div id="running">
-    <div class="running-row">
-      <div id="firmware-switch" role="group" aria-label="Firmware">
-        <span class="label">Firmware</span>
-      </div>
-      <p id="network"></p>
-    </div>
-    <p id="firmware-line"></p>
-  </div>
-  <!-- Everything the page can say about what it is running, and the one check
-       it can make about itself. Filled in from wallet-<firmware>.build-info.json,
-       which the build writes beside the zip from the pins it built from, except
-       the received hash, which comes from the worker. -->
+  <!-- Between the title and the device, so it is the first thing read and then
+       scrolls out of the way, rather than competing with the device for room
+       underneath it.
+
+       The short half is always up. A real seed typed while the device is on
+       Testnet is the same seed, and its mainnet keys are compromised the moment
+       it is entered, so the sentence that says not to type one is not a mainnet
+       sentence. What mainnet adds is the rest: this page then holds the correct
+       mainnet keys, and there is no secure element under them. -->
+  <p class="warn" id="warning"><strong>Simulator.</strong> Never enter a seed
+  phrase you rely on; use a public test seed, a throwaway phrase that holds no
+  bitcoin and never will.<span class="mainnet-only" id="warning-mainnet"> This is
+  not a wallet and has no secure element, and on Mainnet it holds the real
+  mainnet keys for whatever you give it: treat anything typed into it as
+  public.</span></p>
+  <!-- Everything the page can say about what it is running, and the one check it
+       can make about itself. Above the device with the warning, because both are
+       about the thing rather than part of it, and closed until it is asked for.
+       Filled in from wallet-<firmware>.build-info.json, which the build writes
+       beside the zip from the pins it built from, except the received hash,
+       which comes from the worker. -->
   <details id="build">
     <summary>Technical details</summary>
     <div>
+      <!-- What is running, in words. In here rather than out on the page: it is
+           the same material as the rows under it, said longhand. -->
+      <p id="firmware-line"></p>
       <dl>
         <dt>Firmware</dt><dd id="build-firmware">…</dd>
         <dt>Upstream</dt><dd><a id="build-repo" rel="noopener"></a></dd>
@@ -327,6 +346,19 @@
       <a href="https://github.com/bitsagarob/seedsigner-sim/releases/latest" rel="noopener">latest release</a></p>
     </div>
   </details>
+  <div id="device"></div>
+  <canvas id="screen" width="320" height="240"></canvas>
+  <!-- Only offered where it is any use: on a phone, where the page around the
+       device is what is making the device small. -->
+  <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
+  <div id="running">
+    <div class="running-row">
+      <div id="firmware-switch" role="group" aria-label="Firmware">
+        <span class="label">Firmware</span>
+      </div>
+      <p id="network"></p>
+    </div>
+  </div>
   <p id="status">starting…</p>
   <p class="note">This is a simulator, and it starts on Testnet, so you can use it
   with <a href="/signet">Bitsaga Signet</a>, our own test network. These are not real
@@ -374,19 +406,21 @@ const FIRMWARE = FIRMWARES.includes(asked) ? asked : FIRMWARES[0];
 const TUTORIAL = new URLSearchParams(location.search).has("tutorial")
               && FIRMWARE === "smartcard";
 
-// How the page names each firmware, on the switch and in the sentence under the
-// device. Neither is called "SeedSigner" on its own: one is a third party fork
-// of it, and saying so is the whole point of naming them at all.
+// How the page names each firmware, on the switch and in the sentence inside
+// the details panel. The switch carries the name each build calls itself --
+// ShieldSigner is the name on the fork's own boot splash -- and the sentence,
+// which is the one a visitor reads, says in full which is which and that one of
+// them is a third party fork.
 const FIRMWARE_INFO = {
   smartcard: {
-    button: "Smartcard fork",
+    button: "ShieldSigner",
     says: "Running the 3rdIteration smartcard fork of SeedSigner, tag " +
           "SeSi-0.8.7+ShSi-B11, which adds SeedKeeper and Satochip cards.",
     panel: "the 3rdIteration fork of SeedSigner, a third party fork that adds " +
            "SeedKeeper and Satochip cards",
   },
   stock: {
-    button: "Stock SeedSigner",
+    button: "SeedSigner",
     says: "Running stock SeedSigner 0.8.7, the firmware a plain SeedSigner " +
           "runs. It has no smartcard support, so there is no card tray.",
     panel: "SeedSigner as its own project publishes it, which is what a plain " +
@@ -401,7 +435,7 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const networkEl = document.getElementById("network");
 
-// Say which firmware this is, in words, next to the device.
+// Say which firmware this is, in words, in the details panel.
 document.getElementById("firmware-line").textContent = FIRMWARE_INFO[FIRMWARE].says;
 if (FIRMWARE !== "smartcard") document.getElementById("about-smartcard").remove();
 

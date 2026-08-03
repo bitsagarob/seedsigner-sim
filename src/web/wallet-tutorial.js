@@ -1285,7 +1285,7 @@
       var style = element("style");
       style.textContent = CSS;
       document.head.appendChild(style);
-      var button = element("button", "tut-start", "Start the multisig tutorial");
+      var button = element("button", "tut-start", "Start multisig walkthrough");
       button.type = "button";
       button.id = "start-tutorial";
       button.addEventListener("click", function () {

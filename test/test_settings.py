@@ -11,9 +11,10 @@ The wallet's settings live in an in-memory filesystem, so nothing here survives
 a reload, and that is the point: this asks whether the change works at all, not
 whether it persists.
 
-It also checks the network indicator under the device, and this is the file to
-check it in: the indicator is only worth anything if it follows a change made
-through the wallet's own menus, which is what the route below is.
+It also checks the network indicator under the device and the two halves of the
+warning above it, and this is the file to check them in: neither is worth
+anything unless it follows a change made through the wallet's own menus, which is
+what the route below is.
 """
 
 import os
@@ -40,6 +41,22 @@ TO_NETWORK = ("ArrowDown",) * 6 + ("Enter", "Enter")
 # is the entry above it. Deliberately that way round: mainnet is the answer the
 # page has to shout about, and the only way to it is the device's own menu.
 TO_MAINNET = ("ArrowUp", "Enter")
+
+
+# The sentence that is up on either network. A seed you rely on is the same seed
+# whichever network the device is set to, and typing it here compromises its
+# mainnet keys either way, so this half is not a mainnet sentence.
+ALWAYS = "Never enter a seed phrase you rely on"
+
+# What mainnet adds, and only mainnet: no secure element under keys that are now
+# the real ones.
+ONLY_ON_MAINNET = "no secure element"
+
+
+def warning(page):
+    """What the warning says, and whether its mainnet half is showing."""
+    return (page.locator("#warning").inner_text(),
+            page.locator("#warning-mainnet").is_visible())
 
 
 def indicator(page):
@@ -71,6 +88,10 @@ def main() -> int:
               str(indicator(page)))
         check("and offers our test network while it is on one",
               page.locator(".note").is_visible())
+        said, mainnet_half = warning(page)
+        check("the warning is the short one on Testnet",
+              ALWAYS in said and not mainnet_half and ONLY_ON_MAINNET not in said,
+              said)
         page.screenshot(path=harness.firmware_artifact("network-testnet.png"), full_page=True)
 
         for key in TO_SETTINGS:
@@ -125,6 +146,12 @@ def main() -> int:
         # anything, and should not be handed a test network to play on.
         check("and the page stops offering our test network",
               not page.locator(".note").is_visible())
+        # The short half stays: what changed is that the page now holds real
+        # mainnet keys, not whether a seed you rely on may be typed into it.
+        said, mainnet_half = warning(page)
+        check("the warning keeps its short half and adds the mainnet one",
+              ALWAYS in said and mainnet_half and ONLY_ON_MAINNET in said,
+              said)
         page.screenshot(path=harness.firmware_artifact("network-mainnet.png"), full_page=True)
 
         harness.save_screen(page, harness.firmware_artifact("settings-changed.png"))

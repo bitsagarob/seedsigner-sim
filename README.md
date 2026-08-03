@@ -148,7 +148,7 @@ the worked example and what the resulting hashes mean.
 
 ## The multisig tutorial
 
-One button under the device: **Start the multisig tutorial**. It does a whole
+One button under the device: **Start multisig walkthrough**. It does a whole
 2 of 3, in the page, and a visitor never navigates away and never installs
 anything.
 

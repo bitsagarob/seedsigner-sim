@@ -78,12 +78,26 @@ def main() -> int:
         page.goto(harness.wallet_url())
         page.wait_for_selector("#device .ssd-svg")
 
-        # --- the warning, above the device ----------------------------------
+        # --- the order of the page, top to bottom ----------------------------
+        # The title, then the warning, then the device, and the control that
+        # opens the technical details above the device with them. Read off the
+        # rendered boxes rather than off the source order, because either one
+        # can be moved without the other.
+        title = page.locator("h1").bounding_box()
         warn = page.locator("p.warn").bounding_box()
+        details = page.locator("#build > summary").bounding_box()
         device = page.locator("#device").bounding_box()
+        check("the title is above the simulator warning",
+              title["y"] + title["height"] <= warn["y"],
+              f"title ends at {int(title['y'] + title['height'])}, "
+              f"warning starts at {int(warn['y'])}")
         check("the simulator warning sits above the device",
               warn["y"] + warn["height"] <= device["y"],
               f"warning ends at {int(warn['y'] + warn['height'])}, "
+              f"device starts at {int(device['y'])}")
+        check("and so does the technical details control",
+              details["y"] + details["height"] <= device["y"],
+              f"details ends at {int(details['y'] + details['height'])}, "
               f"device starts at {int(device['y'])}")
 
         # --- the screen is not a button --------------------------------------

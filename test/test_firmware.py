@@ -4,8 +4,9 @@ The firmware switch: that it switches, and that the page says what it is running
 Two firmwares are built and the page runs one of them, which changes what the
 page can honestly show. Stock SeedSigner has no smartcard code at all, so a card
 tray under it would be a control for a thing that does not exist, and the
-sentence under the device is the only place a visitor who followed a shared link
-can find out which firmware they are looking at.
+sentence in the technical details panel is where a visitor who followed a shared
+link finds out which firmware they are looking at, in full: the switch itself
+carries only the name each build calls itself.
 
 Nothing here waits for the wallet to boot: every claim it makes is decided by
 the page before Python starts, so this runs in seconds like the tray layout test
@@ -34,6 +35,12 @@ def switch_state(page):
             for b in page.locator("#firmware-switch button").all()]
 
 
+def firmware_line(page):
+    """The sentence saying what is running, which lives inside the panel now."""
+    page.locator("#build").evaluate("node => { node.open = true; }")
+    return page.locator("#firmware-line").inner_text()
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -47,12 +54,16 @@ def main() -> int:
         page.goto(harness.wallet_url(firmware="smartcard"))
         page.wait_for_selector("#firmware-switch button")
 
-        check("the page says it is running the fork, and calls it a fork",
-              FORK in page.locator("#firmware-line").inner_text(),
-              page.locator("#firmware-line").inner_text())
-        check("the switch offers both firmwares, with the fork pressed",
-              switch_state(page) == [("Smartcard fork", "true"),
-                                     ("Stock SeedSigner", "false")],
+        check("the panel says it is running the fork, and calls it a fork",
+              FORK in firmware_line(page), firmware_line(page))
+        # The sentence belongs to the panel, not to the open page: it is the
+        # same material as the rows under it.
+        check("and the open page does not carry that sentence as well",
+              page.locator("#build #firmware-line").count() == 1,
+              str(page.locator("#firmware-line").count()))
+        check("the switch offers both firmwares by name, with the fork pressed",
+              switch_state(page) == [("ShieldSigner", "true"),
+                                     ("SeedSigner", "false")],
               str(switch_state(page)))
         page.wait_for_selector(".cardtray-card")
         check("the card tray is there under the fork",
@@ -72,12 +83,11 @@ def main() -> int:
         # query string it was given instead of replacing it, and every test in
         # this suite would go blind if it did not.
         check("and keeps the rest of the query string", "debug=1" in page.url, page.url)
-        check("the page says it is running stock, and calls it stock",
-              STOCK in page.locator("#firmware-line").inner_text(),
-              page.locator("#firmware-line").inner_text())
+        check("the panel says it is running stock, and calls it stock",
+              STOCK in firmware_line(page), firmware_line(page))
         check("the switch follows",
-              switch_state(page) == [("Smartcard fork", "false"),
-                                     ("Stock SeedSigner", "true")],
+              switch_state(page) == [("ShieldSigner", "false"),
+                                     ("SeedSigner", "true")],
               str(switch_state(page)))
         # Absent, not disabled and not greyed. Stock has no card support at all,
         # so there is nothing for a tray to control and nothing to explain.
@@ -92,9 +102,9 @@ def main() -> int:
         page.wait_for_url(re.compile(r"firmware=smartcard"))
         page.wait_for_selector(".cardtray-card")
         check("switching back comes back on the fork, tray and all",
-              FORK in page.locator("#firmware-line").inner_text()
+              FORK in firmware_line(page)
               and page.locator(".cardtray-card").count() == 3,
-              page.locator("#firmware-line").inner_text())
+              firmware_line(page))
 
         check("no page errors", not errors, "; ".join(errors[:3]))
         browser.close()
