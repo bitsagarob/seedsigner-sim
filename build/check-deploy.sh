@@ -118,6 +118,10 @@ wallet.html|src/web/wallet.html|repo
 wallet-worker.js|src/web/wallet-worker.js|repo
 wallet-camera.js|src/web/wallet-camera.js|repo
 wallet-cards.js|src/web/wallet-cards.js|repo
+wallet-tutorial.js|src/web/wallet-tutorial.js|repo
+signet-coordinator.js|src/web/signet-coordinator.js|repo
+qr-encode.js|src/web/qr-encode.js|repo
+ur-decode.js|src/web/ur-decode.js|repo
 seedsigner-device.js|src/web/seedsigner-device.js|repo
 jsQR.js|src/web/jsQR.js|repo
 sw.js|src/web/sw.js|repo
@@ -137,7 +141,7 @@ wallet-stock.build-info.json|build/out/wallet-stock.build-info.json|repo
 # The served files whose own references are followed. HTML and the scripts the
 # page loads; not jsQR.js, which is a quarter of a megabyte of minified vendor
 # code and names nothing.
-SCAN='index.html wallet.html wallet-worker.js wallet-camera.js wallet-cards.js seedsigner-device.js sw.js'
+SCAN='index.html wallet.html wallet-worker.js wallet-camera.js wallet-cards.js wallet-tutorial.js signet-coordinator.js seedsigner-device.js sw.js'
 
 # The zips and the build-info files are fetched by name per firmware, and the
 # page builds those names in a template literal, so a reference extracted from
