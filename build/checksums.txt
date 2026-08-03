@@ -40,11 +40,11 @@ bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.j
 bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.js
 376de22cdd44011d807feeef72732473f3a01d1a08ee7dafd9f13a22b2982117  src/web/seedsigner-device.js
 c2165a719265ede7e6fd6195d6950f1c6c99bc01aef78431c6d4b0c1f8a825a3  src/web/sw.js
-e7279e0f91233abdf83725250c3f3b242180f57781157862974eb7dc2eb1bb93  src/web/wallet-camera.js
+e904431719d48c07b0f0b203ef9218b0482c03e1c658a03e4fa2f829b323a13d  src/web/wallet-camera.js
 31353308f7ae62967fa4ac63da72de8fca1553e2fd3c815281f7d47487abf15c  src/web/wallet-cards.js
 8ca3f7f59fd74d739615aa4eaa998535d21a6a199076c5b5175f88f4c639ad40  src/web/wallet-worker.js
 6d80f38a10e12d778a000ecea1c1036fe3075a708559d56b8bbf8e4678e470bc  src/web/index.html
-63981d0023b92c3f3dd438b033d62569ed2b3ba6fd13998deaeb90b96ed69cc3  src/web/wallet.html
+b0022343f2b03000f52e7e6d07dccafffcccc186fdfd624a1b973fc9f1bd9fce  src/web/wallet.html
 2e84bdc9ea48e5be912aaf9adf59868102ec4851be790bfe7c6cba006b419ac4  src/web/manifest.json
 
 # The stand-in packages, which build/build-wallet-zip.sh copies out of the working
