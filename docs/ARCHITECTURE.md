@@ -299,6 +299,18 @@ the same layout and rebuilds the mnemonic from the entropy. Both halves are the
 wallet's own code (`SaveToSeedkeeperView` and `SeedKeeperSelectView`), and the card
 only stores and returns bytes.
 
+A multisig wallet descriptor is the other secret the product is sold to carry, and
+to the card it is only a different type byte and a longer payload: `0xC1` rather
+than `0x10`, and a couple of hundred bytes of quorum, xpubs and derivation paths
+rather than 84. Nothing had to be added for it. A secret is a type, a policy, a
+label and some bytes, which is what a SeedKeeper is at the APDU level, so the only
+thing a descriptor changes is that both 128-byte loops run several passes instead
+of none: `test_cards.py` stores a real 2 of 3 in five APDUs and reads it back in
+five, and charges the card the same number of bytes
+`seedkeeper_utils.calculate_seedkeeper_secret_size` predicts it will be charged.
+The wallet's two descriptor screens still cannot use any of that, and that is not
+this package's fault either; see below.
+
 A SeedKeeper has an authentikey too, and it signs each export with it over the
 header *and* the payload together, so a card cannot hand back the right bytes under
 somebody else's label. There is no seed here to derive that key from (a real card
@@ -364,12 +376,27 @@ card without it ever appearing in the clear; it needs a session key negotiated w
 that card's public key, and there is no second card here to negotiate with, so
 clone-to-another-card is refused rather than quietly done in plaintext.
 
-One flow does not work, and it is not this package's fault.
+Two flows do not work, and neither is this package's fault.
+
 `ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value
 into `(response, sw1, sw2)`, but on the pysatochip backend that method returns the
 card's authentikey, so a *successful* import is what raises `TypeError`. The card
 takes the seed; the screen reports failure. See `test/test_cards_seed.py`, which
 asserts it so the day upstream fixes it is not a silent one.
+
+`ToolsSeedkeeperSaveDescriptorView` and `ToolsSeedkeeperLoadDescriptorView` are
+blocked by one missing dictionary entry. Both name the descriptor secret type by
+string, `"Descriptor"`, and `pysatochip.JCconstants.SEEDKEEPER_DIC_TYPE` has no
+such value in 0.17.0, the version this fork pins and the newest one published: it
+stops at `0xC0: 'Data'`. So `make_header("Descriptor", ...)` raises
+`KeyError: 'Descriptor'` on the way in, and `SEEDKEEPER_DIC_TYPE.get()` can never
+answer `"Descriptor"` for anything a card sends on the way out. The save screen
+takes that branch because it read `protocol_minor_version` off the card and got 2;
+a v1 SeedKeeper takes the other branch and stores a descriptor as a `Password`,
+which pysatochip does have a name for. This card reports 2 because that is what
+the card it stands in for reports, and what the seed layout above depends on.
+`test/test_cards_seedkeeper_descriptor.py` drives both screens to that wall and
+asserts it, including that the card is never asked to store anything.
 
 ## The fifth module: screens that show a QR
 

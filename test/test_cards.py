@@ -13,10 +13,12 @@ instruction sets, and the checks below are as interested in what each one
 refuses as in what it answers.
 """
 
+import ast
 import hashlib
 import os
 import sys
 import time
+import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # The package warns when imported outside the browser, because there it would
@@ -28,6 +30,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "src"))
 
 import harness
+import make_qr_y4m
 from harness import check, report
 
 # The card's crypto is embit's, and the client that has to accept what it answers
@@ -64,6 +67,30 @@ from smartcard.Exceptions import (
 
 SEEDKEEPER = simulated_card.KIND_SEEDKEEPER
 SATOCHIP = simulated_card.KIND_SATOCHIP
+
+
+def upstream_function(name, module):
+    """One function out of the wallet zip, compiled on its own.
+
+    seedsigner.helpers.seedkeeper_utils cannot be imported here: importing it
+    reaches the GUI, which reads a JSON file out of the zip by path, and
+    zipimport has no path to give it. The size arithmetic below it is a pure
+    function of its argument, so its definition is compiled by itself rather
+    than transcribed -- which keeps the check pointed at upstream's own code
+    instead of at a paraphrase of it that can quietly stop matching.
+    """
+    with zipfile.ZipFile(WALLET_ZIP) as archive:
+        tree = ast.parse(archive.read(module).decode("utf-8"))
+    definition = next(node for node in tree.body
+                      if isinstance(node, ast.FunctionDef) and node.name == name)
+    namespace = {}
+    exec(compile(ast.Module(body=[definition], type_ignores=[]), module, "exec"), namespace)
+    return namespace[name]
+
+
+# What the wallet works out a secret will cost before it offers to store one.
+calculate_seedkeeper_secret_size = upstream_function(
+    "calculate_seedkeeper_secret_size", "seedsigner/helpers/seedkeeper_utils.py")
 
 
 class FakeTray:
@@ -582,5 +609,137 @@ check("Card B's SeedKeeper published as carrying a secret",
 check("Card C's SeedKeeper is untouched by any of it",
       simulated_card.CARDS[2][SEEDKEEPER].secrets == {}
       and simulated_card.CARDS[2][SEEDKEEPER].setup_done is False)
+
+# ------------------------------ a multisig wallet descriptor on a SeedKeeper
+
+# The other thing the card is sold to carry. A descriptor is a different secret
+# from a masterseed in the two ways that reach the card: it has its own type,
+# 0xC1, and it is long. A 2 of 3 with three xpubs and their key origins runs to
+# hundreds of bytes, so both of the 128-byte loops -- the client's on the way in,
+# the card's on the way out -- run several passes instead of being skipped.
+#
+# 0xC1 is written out rather than looked up because pysatochip 0.17.0, the
+# version this fork pins, has no name for it: SEEDKEEPER_DIC_TYPE stops at 0xC0
+# 'Data'. That missing entry is the wall the wallet's own descriptor screens hit,
+# and test_cards_seedkeeper_descriptor.py is where it is quoted. The card is
+# asked for the type a SeedKeeper v2 files a descriptor under either way, because
+# what a card stores is not the client's dictionary's business.
+TYPE_DESCRIPTOR = 0xC1
+
+DESCRIPTOR = make_qr_y4m.multisig_descriptor()
+DESCRIPTOR_TEXT = list(DESCRIPTOR.encode("utf-8"))
+# The layout ToolsSeedkeeperSaveDescriptorView writes for a v2 card: a two-byte
+# big-endian length and then the descriptor as utf-8. Two bytes rather than the
+# single one a Password gets, because a descriptor does not fit in 255.
+DESCRIPTOR_SECRET = list(len(DESCRIPTOR_TEXT).to_bytes(2, "big")) + DESCRIPTOR_TEXT
+DESCRIPTOR_LABEL = "quorum"
+
+
+def counted(connection):
+    """Wrap a connection so an exchange can be measured, not reasoned about.
+
+    "It chunks" is the claim being made about a long secret, and the only
+    evidence for it is how many APDUs actually cross.
+    """
+    sent = []
+    inner = connection.transmit
+
+    def transmit(apdu, protocol=None):
+        sent.append(list(apdu))
+        return inner(apdu, protocol)
+
+    connection.transmit = transmit
+    return sent
+
+
+print("a multisig wallet descriptor on a SeedKeeper")
+# The wall, asserted in the fast test as well as the slow one, because this is
+# the check that will say so in two seconds on the day it stops being true.
+check("pysatochip has no name for a descriptor, which is the whole of the wall "
+      "the wallet's own descriptor screens hit",
+      "Descriptor" not in SEEDKEEPER_DIC_TYPE.values(),
+      "make_header('Descriptor', ...) raises KeyError; see "
+      "test_cards_seedkeeper_descriptor.py")
+check("a descriptor import is refused until the PIN is verified",
+      send(0xA1, 0x01, 0x01,
+           header_fields(TYPE_DESCRIPTOR, PLAINTEXT_EXPORT, DESCRIPTOR_LABEL)
+           + [0x02, 0x00])[1] == (0x9C, 0x06))
+check("the PIN verifies", send(0x42, 0x00, 0x00, PIN)[1] == (0x90, 0x00))
+check("a 2 of 3 with three xpubs is longer than a seed by a factor of five",
+      len(DESCRIPTOR_SECRET) > 5 * len(MASTERSEED_SECRET),
+      f"{len(DESCRIPTOR)} characters vs {len(MASTERSEED_SECRET)} bytes of seed")
+
+descriptor_fields = header_fields(TYPE_DESCRIPTOR, PLAINTEXT_EXPORT, DESCRIPTOR_LABEL)
+before_descriptor = free_memory()
+apdus = counted(connection)
+response, sw = import_secret(descriptor_fields, DESCRIPTOR_SECRET)
+check("the descriptor imports", sw == (0x90, 0x00), str(sw))
+descriptor_sid = (response[0] << 8) + response[1]
+check("in five APDUs, so the 128-byte loop ran three times",
+      len(apdus) == 5, f"{len(apdus)} APDUs for {len(DESCRIPTOR_SECRET)} bytes")
+check("and the card answers with its own hash of what it stored",
+      bytes(response[2:6]).hex() == hashlib.sha256(bytes(DESCRIPTOR_SECRET)).hexdigest()[:8],
+      bytes(response[2:6]).hex())
+
+# What the card charged for it, against what the wallet predicted it would be
+# charged. Not a copy of upstream's arithmetic: the function itself, lifted out
+# of the zip, so the two cannot drift apart quietly.
+predicted = calculate_seedkeeper_secret_size(
+    {"header": bytes([0x00, 0x00] + descriptor_fields).hex(),
+     "secret_list": DESCRIPTOR_SECRET})
+check("the card charges exactly what calculate_seedkeeper_secret_size predicts",
+      before_descriptor - free_memory() == predicted,
+      f"{before_descriptor - free_memory()} bytes charged, {predicted} predicted")
+
+# The listing is how ToolsSeedkeeperLoadDescriptorView finds a descriptor at all,
+# and this is the parser it reads it with: pysatochip's own, out of wallet.zip.
+headers, (listed, sw) = [], send(0xA6, 0x00, 0x01, None)
+while sw == (0x90, 0x00):
+    headers.append(CardDataParser().parse_seedkeeper_header(listed))
+    listed, sw = send(0xA6, 0x00, 0x02, None)
+check("the listing ends where it always did", sw == (0x9C, 0x12), str(sw))
+descriptor_header = next(h for h in headers if h["id"] == descriptor_sid)
+check("pysatochip parses the descriptor header the card wrote",
+      (descriptor_header["type"], descriptor_header["subtype"], descriptor_header["label"])
+      == (TYPE_DESCRIPTOR, 0x00, DESCRIPTOR_LABEL),
+      str((hex(descriptor_header["type"]), descriptor_header["subtype"],
+           descriptor_header["label"])))
+check("with a fingerprint of the descriptor, not the zeros the client sent",
+      descriptor_header["fingerprint"] == hashlib.sha256(bytes(DESCRIPTOR_SECRET)).hexdigest()[:8],
+      descriptor_header["fingerprint"])
+check("imported in plaintext, which is the card's word and not the client's",
+      SEEDKEEPER_DIC_ORIGIN.get(descriptor_header["origin"]) == "Plaintext import",
+      hex(descriptor_header["origin"]))
+check("and it sits next to the seed rather than replacing it",
+      sorted(h["id"] for h in headers) == [sid, sealed_sid, descriptor_sid],
+      str(sorted(h["id"] for h in headers)))
+
+apdus = counted(connection)
+descriptor_bytes, (secret, signature), sw = export_secret(descriptor_sid)
+check("the descriptor exports", sw == (0x90, 0x00), str(sw))
+check("in five APDUs, so the export loop ran four times",
+      len(apdus) == 5, f"{len(apdus)} APDUs for {len(DESCRIPTOR_SECRET)} bytes")
+check("byte for byte what went in", secret == DESCRIPTOR_SECRET,
+      f"{len(secret)} bytes back for {len(DESCRIPTOR_SECRET)} in")
+check("and it is still a descriptor when it comes off the card",
+      bytes(secret[2:]).decode("utf-8") == DESCRIPTOR,
+      DESCRIPTOR[:32] + "...")
+authentikey = CardDataParser().parse_bip32_get_authentikey(send(0x73, 0x00, 0x00)[0])
+CardDataParser().verify_signature(descriptor_bytes + secret, signature, authentikey)
+check("signed by the card's authentikey, over the header and the descriptor together", True)
+
+# Export rights are a property of the secret, so a descriptor gets them checked
+# the same way a seed does and the card is what enforces the answer.
+response, sw = import_secret(
+    header_fields(TYPE_DESCRIPTOR, EXPORT_FORBIDDEN, "sealed quorum"), DESCRIPTOR_SECRET)
+check("a descriptor can be stored with export forbidden", sw == (0x90, 0x00), str(sw))
+sealed_descriptor = (response[0] << 8) + response[1]
+check("and the card refuses to hand that one back in the clear",
+      send(0xA2, 0x01, 0x01,
+           [sealed_descriptor >> 8, sealed_descriptor & 0xFF])[1] == (0x9C, 0x31),
+      "0x9C31 is what pysatochip reports as 'export not allowed by SeedKeeper policy'")
+check("an encrypted export of a descriptor is not implemented either",
+      send(0xA2, 0x02, 0x01,
+           [descriptor_sid >> 8, descriptor_sid & 0xFF])[1] == (0x6D, 0x00))
 
 sys.exit(report())

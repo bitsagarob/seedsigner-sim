@@ -31,7 +31,7 @@ upstream commits, which takes a few minutes; later runs reuse all of it.
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
 `tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`,
 `stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`, `cards_browser`,
-`cards_seed`, `cards_seedkeeper`:
+`cards_seed`, `cards_seedkeeper`, `cards_descriptor`:
 
     python3 test/run.py scan          # everything with "scan" in the name
     python3 test/run.py stock         # the three stock-firmware scans
@@ -50,7 +50,7 @@ Individual files run on their own too, against a server you start yourself:
     python3 test/test_scan.py
 
 Screenshots land in `test/artifacts/`. So do the QR videos, which `run.py`
-deletes afterwards because they are 115MB and regenerate in seconds; set
+deletes afterwards because they are 160MB and regenerate in seconds; set
 `SIM_KEEP_VIDEOS=1` to keep them.
 
 | variable | default | what it does |
@@ -82,8 +82,12 @@ is verified, refused if it is too short, refused a second time, and once accepte
 answering with keys that pysatochip's own `CardDataParser` (read out of
 `wallet.zip`, so it is the copy the browser runs) recovers a public key from.
 The card's `m/84'/0'/0'` has to equal the same seed derived outside it, and its
-master fingerprint has to be the test vector's. Two seconds, and it says why the
-browser tests failed before either has finished booting.
+master fingerprint has to be the test vector's. Then the SeedKeeper half: a
+masterseed and a 448-character 2 of 3 multisig descriptor stored, listed,
+exported and checked against pysatochip's own header parser, the export rights
+of each enforced by the card, and the space each costs compared with upstream's
+own `calculate_seedkeeper_secret_size`. Two seconds, and it says why the browser
+tests failed before either has finished booting.
 
 **`test_tray_layout.py`**: the card tray as a control: three cards side by side
 at a narrow viewport with no horizontal scrollbar, the accent and lift that show
@@ -187,6 +191,29 @@ about the surrounding page or its fonts can enter into it.
 It also reloads the page at the end and requires three factory-fresh SeedKeepers,
 because card state living only in memory is a decision rather than an oversight.
 
+**`test_cards_seedkeeper_descriptor.py`** -- the other flow the card is sold for,
+a **multisig wallet descriptor** travelling on a SeedKeeper instead of being
+scanned. Neither of the wallet's two screens for it can work at the pinned tag,
+and this file is where that is pinned down rather than discovered again later.
+
+A 2 of 3 over three published BIP39 vectors goes in by camera, so `2 of 3` and
+three fingerprints on the wallet's own screen say embit really parsed it. Then
+*Save MultiSig Descriptor* is driven to the wall: a SeedKeeper v2 files a
+descriptor under a secret type pysatochip 0.17.0 has no name for, so
+`make_header("Descriptor", ...)` raises `KeyError: 'Descriptor'` and the wallet
+puts up an error reading exactly that. The checks are that the success screen is
+unreachable and that **the card was never asked to store anything**: a simulator
+that answered a request the wallet never made would be inventing the flow rather
+than running it. *Load MultiSig Descriptor* is blocked by the same missing entry
+from the other side, and ends on the wallet's own "No Descriptors" for a card it
+did read.
+
+Everything the card would need is proved next door, in `test_cards.py`: the same
+descriptor stored as type `0xC1`, read back byte for byte, its header parsed by
+pysatochip and its cost checked against upstream's own size arithmetic. The fix
+is a line in somebody else's package, so on the day it lands these checks fail
+and say so.
+
 ## Supporting files
 
 - `harness.py`: where to point the tests, and the log reader they share.
@@ -198,6 +225,8 @@ because card state living only in memory is a decision rather than an oversight.
 - `make_qr_y4m.py`: writes the `.y4m` videos Chromium's fake camera plays,
   using the wallet's own vendored `qrcode` out of `wallet.zip` so the QR under
   test is drawn by the library SeedSigner draws one with. The seed is the
-  standard BIP39 test vector "army van defense …"; nothing about it is secret and
-  nothing should ever hold value.
+  standard BIP39 test vector "army van defense …", and the multisig descriptor
+  is derived from that vector and two more out of BIP39's own test file, so it
+  is visibly three published seeds rather than a string somebody typed. Nothing
+  about any of them is secret and nothing should ever hold value.
 - `run.py`: the runner described above.

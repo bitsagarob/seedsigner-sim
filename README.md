@@ -123,6 +123,14 @@ also click the buttons on the device.
   `card_bip32_import_seed()`, which returns one, so a *successful* import is what
   raises. Still present on their `dev` tip; nothing here works around it. The card
   is seeded regardless and reading it back works.
+- **A multisig descriptor by card: upstream's bug too.** The two screens are
+  there, and so is everything the card needs (`test_cards.py` puts a 2 of 3 on
+  one, 448 characters of it, and reads it back byte for byte). But a SeedKeeper
+  v2 files a descriptor under a secret type the pinned pysatochip has no name
+  for, so *Save MultiSig Descriptor* raises `KeyError: 'Descriptor'` before a
+  byte reaches the card, and *Load MultiSig Descriptor* can never match one. One
+  missing dictionary entry in somebody else's package; nothing here works
+  around it.
 - **Copying a secret from one SeedKeeper to another**, an encrypted exchange
   needing a second card to negotiate a session key with. Refused rather than
   quietly done in the clear.
