@@ -128,12 +128,19 @@ fi
 # from the repository root; the loop below exists so that the check works the
 # same way on a machine whose sha256 tool is shasum.
 #
-# Two directories get a second question asked of them as well. src/smartcard and
-# src/fakes are copied into a wallet zip whole rather than file by file, so
-# checking only the files the manifest happens to name would miss a file added to
-# one of them: it would reach the zip, move its hash, and be listed nowhere.
+# The other direction is asked as well, because checking only the files the
+# manifest happens to name would miss a file added since it was written: it would
+# be served, or packaged into a wallet zip, and be listed nowhere. Which files
+# should be listed is not repeated here -- build/update-checksums.sh --list is
+# the one place that decides, and the same script is what regenerates the file
+# when a change to one of them is deliberate.
 
-MANIFEST_DIRS="src/smartcard src/fakes"
+UPDATE_CHECKSUMS="${SCRIPT_DIR}/update-checksums.sh"
+REGENERATE_HINT="If the change is deliberate, regenerate the manifest with
+
+    ./build/update-checksums.sh
+
+and commit it together with the files that changed."
 
 verify_checksums() {
     [ -f "${CHECKSUMS_FILE}" ] || die "missing ${CHECKSUMS_FILE}"
@@ -160,32 +167,36 @@ verify_checksums() {
         checked=$((checked + 1))
     done < "${CHECKSUMS_FILE}"
 
-    [ "${failures}" -eq 0 ] || die "${failures} committed file(s) do not match build/checksums.txt"
+    [ "${failures}" -eq 0 ] || die "${failures} committed file(s) do not match build/checksums.txt
+
+${REGENERATE_HINT}"
     [ "${checked}" -gt 0 ]  || die "build/checksums.txt listed nothing to check"
 }
 
-# The other direction, for the two directories that go into a zip wholesale.
-# __pycache__ is skipped because it is generated, gitignored, and stripped from
-# the staged tree by the build before it writes anything.
+# The other direction: every file that should be listed, is. The set comes from
+# build/update-checksums.sh, so this cannot drift from what regenerating the
+# manifest would produce.
 verify_manifest_covers() {
-    local dir file rel unlisted=0
+    local rel unlisted=0 covered
 
-    for dir in ${MANIFEST_DIRS}; do
-        [ -d "${REPO_ROOT}/${dir}" ] || die "missing ${REPO_ROOT}/${dir}"
-        while IFS= read -r file; do
-            rel="${file#"${REPO_ROOT}/"}"
-            if awk -v want="${rel}" '$2 == want { found = 1 } END { exit !found }' \
-                   "${CHECKSUMS_FILE}"; then
-                continue
-            fi
-            echo "    UNLISTED ${rel}" >&2
-            unlisted=$((unlisted + 1))
-        done < <(find "${REPO_ROOT}/${dir}" -type f \
-                      ! -name '*.pyc' ! -path '*/__pycache__/*')
-    done
+    [ -x "${UPDATE_CHECKSUMS}" ] || die "missing ${UPDATE_CHECKSUMS}"
+    covered="$("${UPDATE_CHECKSUMS}" --list)" || die "could not list the files build/checksums.txt should cover"
+    [ -n "${covered}" ] || die "build/update-checksums.sh --list named no files"
 
-    [ "${unlisted}" -eq 0 ] || die "${unlisted} file(s) under ${MANIFEST_DIRS} are packaged into a wallet zip but are not in build/checksums.txt"
-    echo "    ok       every file under ${MANIFEST_DIRS} is listed"
+    while IFS= read -r rel; do
+        [ -n "${rel}" ] || continue
+        if awk -v want="${rel}" '$2 == want { found = 1 } END { exit !found }' \
+               "${CHECKSUMS_FILE}"; then
+            continue
+        fi
+        echo "    UNLISTED ${rel}" >&2
+        unlisted=$((unlisted + 1))
+    done <<< "${covered}"
+
+    [ "${unlisted}" -eq 0 ] || die "${unlisted} file(s) are served or packaged into a wallet zip but are not in build/checksums.txt
+
+${REGENERATE_HINT}"
+    echo "    ok       every file it should cover is listed ($(echo "${covered}" | wc -l | tr -d ' ') of them)"
 }
 
 step "checking committed build inputs against build/checksums.txt"

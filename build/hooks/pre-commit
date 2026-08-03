@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# Refuse a commit whose build/checksums.txt disagrees with the files it lists.
+#
+# Install (hooks are not cloned, so this is not automatic):
+#
+#     git config core.hooksPath build/hooks
+#
+# The mistake this exists for happened three times in one day and twice went out
+# red in CI: a file changed on one branch, the manifest was regenerated on
+# another, the merge took both and the two no longer described each other. Each
+# half looked fine in its own diff. Only the commit that joined them was wrong,
+# which is exactly the thing a person cannot be relied on to notice.
+#
+# It checks the staged tree, not the working tree, because the index is what a
+# commit records: a fix left unstaged would otherwise let a broken commit
+# through. That is also why the merge case is covered by pre-merge-commit next
+# to this file -- git does not run pre-commit for a merge.
+#
+# It only ever reads. It does not regenerate the manifest for you, and it must
+# not: a hook that quietly fixed the file would turn every unintended change to
+# a served file or a simulated card into a blessed one, and blessing those
+# silently is the failure the manifest exists to prevent. It says which files
+# disagree and which command to run; running it is a decision.
+
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+
+# Nothing to enforce in a checkout that predates the script, e.g. when bisecting
+# across the commit that added it. Do not fail a commit over that.
+[ -x "${root}/build/update-checksums.sh" ] || exit 0
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/seedsigner-sim-hook.XXXXXXXX")"
+trap 'rm -rf -- "${tmp}"' EXIT
+
+# The staged tree, materialised. Every tracked file, so the check sees the same
+# thing the commit will contain rather than whatever the working tree happens to
+# hold at this second.
+git checkout-index --all --force --prefix="${tmp}/"
+
+if "${root}/build/update-checksums.sh" --check --root "${tmp}" >"${tmp}/.report" 2>&1; then
+    exit 0
+fi
+
+cat "${tmp}/.report" >&2
+cat >&2 <<'MSG'
+
+pre-commit: this commit would record files and a manifest that disagree.
+
+Nothing has been changed for you. If the file changes above are deliberate:
+
+    ./build/update-checksums.sh
+    git add build/checksums.txt
+
+and commit them together, which is the point -- the manifest moving is the
+record that somebody meant the bytes to move.
+MSG
+exit 1

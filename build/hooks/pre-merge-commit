@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#
+# git does not run pre-commit for a merge commit; it runs this instead. Same
+# check, because a merge is where the two halves came apart: one branch changed
+# a file, the other regenerated the manifest, and neither diff was wrong on its
+# own.
+
+exec "$(dirname -- "$0")/pre-commit"

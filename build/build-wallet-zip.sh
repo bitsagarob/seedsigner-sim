@@ -474,6 +474,17 @@ git_checkout() {
     fi
 }
 
+# What to tell somebody who hits either half of the check below. This build
+# never rewrites build/checksums.txt: a build that refreshed the manifest would
+# package a modified simulated card and call it correct, which is the one thing
+# the manifest is here to stop. Regenerating is a separate command, run on
+# purpose, leaving a diff.
+REGENERATE_HINT="If the change is deliberate, regenerate the manifest with
+
+    ./build/update-checksums.sh
+
+and commit it together with the files that changed."
+
 # verify_against_manifest DIR
 #
 # Every file under DIR has to be listed in build/checksums.txt and hash to what
@@ -495,14 +506,15 @@ verify_against_manifest() {
     while IFS= read -r file; do
         rel="${file#"${REPO_ROOT}/"}"
         expected="$(awk -v want="${rel}" '$2 == want { print $1 }' "${CHECKSUMS_FILE}")"
-        [ -n "${expected}" ] || die "${rel} would be packaged into the zip but is not listed in build/checksums.txt"
+        [ -n "${expected}" ] || die "${rel} would be packaged into the zip but is not listed in build/checksums.txt
+${REGENERATE_HINT}"
 
         actual="$(sha256_of "${file}")"
         if [ "${actual}" != "${expected}" ]; then
             die "${rel} does not match build/checksums.txt
   expected ${expected}
   got      ${actual}
-If the change is deliberate, update build/checksums.txt in the same commit."
+${REGENERATE_HINT}"
         fi
     done < <(find "${dir}" -type f ! -name '*.pyc' ! -path '*/__pycache__/*')
 }
