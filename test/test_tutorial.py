@@ -535,11 +535,23 @@ def main() -> int:
         page.screenshot(path=harness.artifact("tutorial-360-running.png"), full_page=True)
         page.close()
 
+        # The page at rest is a SeedSigner and nothing else, which is the thing
+        # worth handing to a stranger: the tutorial is a guided demo of one
+        # ceremony and turns the page into a lesson, so it is behind the URL.
+        # ?tutorial=offer is the button that used to be on every visit.
+        bare = context.new_page()
+        bare.goto(f"{ORIGIN}/wallet.html")
+        bare.wait_for_timeout(2500)
+        check("the page at rest says nothing about a tutorial",
+              bare.locator("#start-tutorial").count() == 0
+              and bare.locator("#tutorial").count() == 0)
+        bare.close()
+
         resting = context.new_page()
         resting.set_viewport_size({"width": 360, "height": 780})
-        resting.goto(f"{ORIGIN}/wallet.html")
+        resting.goto(f"{ORIGIN}/wallet.html?tutorial=offer")
         resting.wait_for_timeout(2500)
-        check("the resting page offers the tutorial and nothing else",
+        check("asked for it, the page offers the tutorial and nothing else",
               resting.locator("#start-tutorial").count() == 1
               and resting.locator("#tutorial").count() == 0)
         rest_width = resting.evaluate(
@@ -548,8 +560,10 @@ def main() -> int:
               rest_width[0] <= rest_width[1], f"{rest_width[0]}px in {rest_width[1]}px")
         resting.screenshot(path=harness.artifact("tutorial-360-resting.png"), full_page=True)
 
+        # Asking for it, so this still proves the firmware gate rather than
+        # passing because nothing offers a tutorial on a bare URL any more.
         stock = context.new_page()
-        stock.goto(f"{ORIGIN}/wallet.html?firmware=stock")
+        stock.goto(f"{ORIGIN}/wallet.html?firmware=stock&tutorial=offer")
         stock.wait_for_timeout(2500)
         check("stock is not offered a tutorial about cards it does not have",
               stock.locator("#start-tutorial").count() == 0)
