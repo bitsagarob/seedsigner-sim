@@ -347,6 +347,12 @@ What it cannot prove is that a spend confirms on a real chain.
 
 ## `test_tutorial_live.py`: and with one
 
+Run it against the deployed site with `--deployed`, which turns both pieces of
+scaffolding off: nothing is served from this checkout and the broadcast goes to
+the real endpoint. That is the run worth trusting before a release, and it is how
+the 2 of 3 confirmed in block 1125 was driven.
+
+
 Not in `run.py`, and not run by CI: it needs the network, it needs Bitsaga
 Signet to be up, and it waits for real blocks. It drives the whole tutorial self
 driving, follows the panel's own step titles, refuses any red verdict, and at

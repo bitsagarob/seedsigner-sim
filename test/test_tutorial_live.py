@@ -54,6 +54,11 @@ def main(argv) -> int:
     parser.add_argument("--mode", default="self", choices=["self", "hands"])
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--port", type=int, default=harness.PORT)
+    # The scaffolding below exists because this file predates the deployed site
+    # having a broadcast endpoint. With --deployed it runs against bitsaga.be as
+    # a visitor would: nothing served from this checkout, nothing answered here.
+    parser.add_argument("--deployed", action="store_true",
+                        help="drive the deployed site instead of this checkout")
     args = parser.parse_args(argv[1:])
 
     broadcast = []
@@ -63,8 +68,9 @@ def main(argv) -> int:
         browser = p.chromium.launch(headless=not args.headed)
         context = browser.new_context(viewport={"width": 1000, "height": 1300},
                                       service_workers="block")
-        serve_site_at_real_origin(context, args.port)
-        answer_broadcast(context, broadcast)
+        if not args.deployed:
+            serve_site_at_real_origin(context, args.port)
+            answer_broadcast(context, broadcast)
         page = context.new_page()
         lines = []
         page.on("console", lambda m: lines.append(m.text))
