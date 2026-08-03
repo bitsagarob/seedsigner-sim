@@ -27,6 +27,11 @@ on:
 
 permissions:
   contents: read
+  # For the attestation below. id-token is what signs it; attestations is what
+  # records it against the repository. Both are write, and both are needed only
+  # by that one step.
+  id-token: write
+  attestations: write
 
 jobs:
   rebuild:
@@ -113,6 +118,21 @@ jobs:
             echo "from a build that matched to find out which files moved." >&2
           fi
           exit 1
+
+      # Having re-derived the published hash, say so in a form that is not our
+      # word for it. GitHub signs a statement that this exact wallet.zip came out
+      # of this workflow, at this commit, and records it against the repository;
+      # `gh attestation verify wallet.zip --repo bitsagarob/seedsigner-sim`
+      # checks it against a file you downloaded, with nothing from us involved.
+      #
+      # Push only. A pull request from a fork runs without the write permissions
+      # this needs, and a step that cannot work there should be skipped rather
+      # than left to fail and teach people to ignore a red mark.
+      - name: Attest that this workflow produced this wallet.zip
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/out/wallet.zip
 
       # Only useful when the comparison above went red, and then it is the whole
       # of the investigation: which file differs, rather than that one does.
