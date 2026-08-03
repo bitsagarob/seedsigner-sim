@@ -1,0 +1,221 @@
+# Runs upstream SeedSigner's own test suite against the dependency versions this
+# repository pins.
+#
+# This repository ships about 161,000 lines of upstream code verbatim and around
+# 1,600 lines of its own. Writing our own tests for the wallet's behaviour is
+# reinventing a wheel upstream already turns: they ship a 76-file, 22,000-line
+# pytest suite, written by the people who wrote the code it tests. Running it
+# costs one job and nothing else, and it is a much better check of the wallet
+# than anything we would think to write.
+#
+# The reason it is worth running *here* rather than just trusting that upstream
+# runs it is build/build-wallet-zip.sh. That script chooses its own dependency
+# versions -- embit, ecdsa, mnemonic, pysatochip, qrcode, base58 and the rest,
+# each by exact version and sha256 -- because wallet.zip has to be assembled by
+# hand from content-addressed artifacts to be reproducible. Upstream tests
+# against whatever their requirements.txt resolves to. Those two sets agree
+# today, and nothing enforces that they keep agreeing. This job is what says so:
+# it installs OUR pins and runs THEIR tests, so the day a repin moves us off what
+# upstream's code expects, a test written by upstream goes red and names the
+# behaviour that changed.
+#
+# Nothing is vendored. The suite is cloned at CI time from the same commit
+# UPSTREAM pins the wallet to, read out of that file at runtime rather than
+# copied into this workflow -- a sha written down here would silently rot the day
+# we repin, which is exactly the day this job needs to be right. No test file
+# enters this repository and nothing here touches wallet.zip.
+#
+# Its own workflow, like reproducible-build.yml, so it goes red under its own
+# name and against its own question. It must not share test.yml's cache: that
+# cache holds a built wallet.zip and a Pyodide runtime, neither of which this job
+# has any use for, and a job whose whole point is "install these exact versions"
+# should install them rather than find them lying around. So there is no
+# actions/cache here at all -- see the note on pip caching below.
+name: upstream-tests
+
+on:
+  # Pushes only on the default branch, and every pull request. A
+  # contributor's branch is tested when they open the PR, rather than
+  # twice for every push once they have.
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-24.04
+    # The measured run is about six minutes, most of it waiting on gpg
+    # subprocesses generating keys rather than on CPU. This runs on CPython, not
+    # in a browser, so it is nothing like test.yml's cost.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # No `cache:` key deliberately. setup-python's pip cache is keyed on a
+          # requirements file in the repository, and this job's requirements are
+          # derived at runtime from the build script's table; there is nothing
+          # stable to key on, and a stale wheel is precisely the failure mode
+          # this job exists to catch.
+
+      - name: Clone upstream at the pin
+        run: |
+          set -euo pipefail
+
+          # Same awk idiom build-wallet-zip.sh reads the pin with, against the
+          # same file. One place to look, one place to change.
+          repo="$(awk -F= '/^[[:space:]]*repo[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
+          commit="$(awk -F= '/^[[:space:]]*commit[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
+          tag="$(awk -F= '/^[[:space:]]*tag[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
+          [ -n "${repo}" ]   || { echo "no 'repo =' line in UPSTREAM" >&2; exit 1; }
+          [ -n "${commit}" ] || { echo "no 'commit =' line in UPSTREAM" >&2; exit 1; }
+
+          echo "upstream  ${repo}"
+          echo "commit    ${commit}"
+          echo "tag       ${tag}"
+
+          dir="${RUNNER_TEMP}/upstream"
+          git init --quiet "${dir}"
+          git -C "${dir}" remote add origin "${repo}"
+          git -C "${dir}" fetch --quiet --depth 1 origin "${commit}"
+          git -C "${dir}" -c advice.detachedHead=false checkout --quiet FETCH_HEAD
+
+          # git verifies the object graph hashes to what we asked for, so landing
+          # on the right sha is the whole integrity check.
+          head="$(git -C "${dir}" rev-parse HEAD)"
+          [ "${head}" = "${commit}" ] || { echo "checkout landed on ${head}, expected ${commit}" >&2; exit 1; }
+
+          echo "UPSTREAM_DIR=${dir}" >> "$GITHUB_ENV"
+
+      - name: Work out this repository's pinned dependency set
+        run: |
+          set -euo pipefail
+
+          # The authoritative list is the DEPENDENCIES table inside
+          # build-wallet-zip.sh -- the same rows that decide what goes into
+          # wallet.zip, version and sha256 and all. Read out of the script rather
+          # than duplicated here, for the same reason the upstream sha is: a copy
+          # is a thing that can drift.
+          awk '/^DEPS$/ { inside=0 } inside { print } /<<.DEPS./ { inside=1 }' \
+              build/build-wallet-zip.sh > "${RUNNER_TEMP}/pins.txt"
+          [ -s "${RUNNER_TEMP}/pins.txt" ] || { echo "could not read the dependency table out of build/build-wallet-zip.sh" >&2; exit 1; }
+
+          # The pypi rows become a hash-pinned requirements file pointing at the
+          # exact artifacts the build fetches -- same URL, same sha256 -- so what
+          # the tests import is byte for byte what wallet.zip is built from.
+          awk -F'|' '$1=="pypi" { printf "%s @ %s --hash=sha256:%s\n", $3, $5, $6 }' \
+              "${RUNNER_TEMP}/pins.txt" > "${RUNNER_TEMP}/req-ours.txt"
+
+          # Five dependencies the table deliberately leaves out because they are
+          # compiled extensions that Pyodide supplies in the browser (the reasons
+          # are written out above the table). There is no Pyodide here, so they
+          # come from upstream's own requirements.txt at upstream's own versions
+          # -- read from the pinned clone, not written down here.
+          grep -E '^(Pillow|pycryptodomex|cryptography|cffi|pycparser)[=<>]' \
+               "${UPSTREAM_DIR}/requirements.txt" > "${RUNNER_TEMP}/req-compiled.txt"
+          count="$(wc -l < "${RUNNER_TEMP}/req-compiled.txt")"
+          [ "${count}" -eq 5 ] || { echo "expected 5 compiled dependencies in upstream's requirements.txt, found ${count}" >&2; exit 1; }
+
+          echo "=== our pins, from build/build-wallet-zip.sh ==="
+          cat "${RUNNER_TEMP}/req-ours.txt"
+          echo
+          echo "=== compiled dependencies, from upstream's requirements.txt ==="
+          cat "${RUNNER_TEMP}/req-compiled.txt"
+
+      - name: Install
+        run: |
+          set -euo pipefail
+
+          # Order matters: ours go on last, with --no-deps, so that if a pin ever
+          # disagrees with what upstream's resolver would have picked, ours is
+          # what the tests run against. That is the entire point of the job.
+          python -m pip install --disable-pip-version-check -r "${RUNNER_TEMP}/req-compiled.txt"
+          python -m pip install --disable-pip-version-check -r "${UPSTREAM_DIR}/tests/requirements.txt"
+          python -m pip install --disable-pip-version-check \
+              --no-deps --force-reinstall --require-hashes -r "${RUNNER_TEMP}/req-ours.txt"
+
+          # The four git-pinned dependencies are placed on PYTHONPATH rather than
+          # installed, at <clone>/<subpath>, which is exactly where
+          # build-wallet-zip.sh looks for them before copying them into the zip.
+          # They are pure Python and flat on sys.path in the browser too, so this
+          # is the same arrangement the wallet actually runs under, and it needs
+          # no packaging metadata that the pin does not contain.
+          pythonpath=""
+          while IFS='|' read -r kind module dist release url integrity subpath; do
+            [ "${kind}" = "git" ] || continue
+            dir="${RUNNER_TEMP}/dep-${module}"
+            git init --quiet "${dir}"
+            git -C "${dir}" remote add origin "${url}"
+            git -C "${dir}" fetch --quiet --depth 1 origin "${integrity}"
+            git -C "${dir}" -c advice.detachedHead=false checkout --quiet FETCH_HEAD
+            head="$(git -C "${dir}" rev-parse HEAD)"
+            [ "${head}" = "${integrity}" ] || { echo "${module}: checkout landed on ${head}, expected ${integrity}" >&2; exit 1; }
+            echo "git dependency ${module} (${dist}) at ${integrity}"
+            pythonpath="${pythonpath}${pythonpath:+:}${dir}/${subpath}"
+          done < "${RUNNER_TEMP}/pins.txt"
+
+          echo "PYTHONPATH=${pythonpath}" >> "$GITHUB_ENV"
+
+      - name: Show what is actually installed
+        run: |
+          set -euo pipefail
+          # So a reader of a green run can see which versions it was green
+          # against, without having to reconstruct them from the pins.
+          python -m pip list --format=columns
+          echo
+          # pyscard is expected to be missing and is the only thing pip should
+          # complain about; see the note in the run step below. Printed rather
+          # than enforced, because a second complaint appearing here is
+          # information, not a reason to fail before the tests have run.
+          python -m pip check || true
+
+      - name: Run upstream's suite
+        run: |
+          set -euo pipefail
+
+          # ONE upstream test file is not collected. It is not a blanket ignore
+          # and it is not a bare `|| true`: everything else in the suite runs and
+          # a single failure anywhere fails this job.
+          #
+          #   tests/test_smartcard_hardware.py  (50 tests)
+          #
+          #     Its own docstring calls it "hardware-in-the-loop" and lists what
+          #     it requires: a PC/SC smartcard reader, a blank JavaCard with the
+          #     default GlobalPlatform key, and pyscard. There is no reader on a
+          #     CI runner, so all 50 of its tests skip themselves at
+          #     "No PC/SC smartcard reader detected" -- nothing is being hidden
+          #     by not collecting them, because none of them can execute here.
+          #
+          #     It has to be --ignore rather than --deselect because the damage
+          #     is done at import time, during collection, before any test runs.
+          #     Lines 37-41 of that file delete the MagicMock shims for pysatochip
+          #     out of sys.modules so the real library can talk to a real card.
+          #     Nothing puts them back, so every later test that reaches
+          #     pysatochip imports it for real; the real pysatochip imports
+          #     `smartcard.CardType` from pyscard, and pyscard is one of the four
+          #     hardware seams this repository replaces (src/smartcard/ is a
+          #     simulated card, and there are no Linux wheels for pyscard -- it
+          #     needs swig and libpcsclite to build against a PC/SC daemon that
+          #     is not there). Upstream never sees this because upstream installs
+          #     pyscard. Three tests in test_bip85_gpg.py fail this way, and they
+          #     pass if that file is simply collected in a different order, which
+          #     is what makes it a collection-order fault in the suite rather
+          #     than anything about the wallet or about our pins.
+          #
+          # No coverage is measured. upstream's tests/requirements.txt brings
+          # coverage and pytest-cov along and they are installed as upstream
+          # specifies, but this job runs neither: it asks whether the tests pass
+          # against our pins, not how much of the wallet they touch.
+          #
+          # -rs lists every skip and its reason, so the difference between "ran"
+          # and "skipped itself" is in the output rather than in a total.
+          cd "${UPSTREAM_DIR}"
+          python -m pytest tests/ \
+              --ignore=tests/test_smartcard_hardware.py \
+              -rs -q
