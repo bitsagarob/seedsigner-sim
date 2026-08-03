@@ -17,7 +17,7 @@
  * blocks inside SeedSigner's controller loop and SharedArrayBuffer is the only
  * channel that can reach it.
  */
-const VERSION = "sim-v2";
+const VERSION = "sim-v3";
 const CACHE = "seedsignersim-" + VERSION;
 
 // Small enough to fetch up front so a first-run offline load still works.
