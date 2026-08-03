@@ -89,6 +89,12 @@ switches to stock and back, and `?firmware=stock` is a link straight to it.
   written into the `settings.json` the device reads at boot, the way a configured
   device would have it, and Mainnet is still in Settings > Advanced > Bitcoin
   network exactly as on hardware.
+- **Mainnet really works, which is exactly why it is dangerous.** On Mainnet the
+  wallet exports the right mainnet account keys and really signs a mainnet
+  transaction: `test/test_mainnet.py` checks both against BIP32, BIP143 and
+  ECDSA worked out from the specifications, with no coins, no network and
+  nothing broadcast. So a mainnet key derived in a browser tab is a real key,
+  and should be treated as public from the moment it appears there.
 - **Pinned to a release, not a branch tip.** [`UPSTREAM`](UPSTREAM) has a section
   per firmware. Stock is SeedSigner's own tag `0.8.7` (`e0a80d4b…`). The fork is
   3rdIteration's `SeSi-0.8.7+ShSi-B11` (`662d9dba…`), which is also the tag the

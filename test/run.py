@@ -59,6 +59,7 @@ SUITE = [
     ("cards_seed", ["test_cards_seed.py"], True),
     ("cards_seedkeeper", ["test_cards_seedkeeper.py"], True),
     ("cards_descriptor", ["test_cards_seedkeeper_descriptor.py"], True),
+    ("mainnet", ["test_mainnet.py"], True),
 ]
 
 # The same file scanned twice per firmware, once per QR encoding. Both must
@@ -243,7 +244,8 @@ def main(argv) -> int:
         # The videos are ~115MB and regenerate in seconds; the screenshots are
         # the part worth keeping. SIM_KEEP_VIDEOS=1 to leave them behind.
         if not os.environ.get("SIM_KEEP_VIDEOS"):
-            for name in ("qr.y4m", "qr-compact.y4m", "qr-blank.y4m", "descriptor.y4m"):
+            for name in ("qr.y4m", "qr-compact.y4m", "qr-blank.y4m", "descriptor.y4m",
+                         "mainnet-camera.y4m"):
                 path = os.path.join(harness.ARTIFACT_DIR, name)
                 if os.path.exists(path):
                     os.remove(path)

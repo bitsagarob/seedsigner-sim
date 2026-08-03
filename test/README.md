@@ -31,7 +31,7 @@ upstream commits, which takes a few minutes; later runs reuse all of it.
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
 `tray_layout`, `firmware`, `build_info`, `settings`, `scan_seedqr`, `scan_compact`,
 `scan_native`, `stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`,
-`cards_browser`, `cards_seed`, `cards_seedkeeper`, `cards_descriptor`:
+`cards_browser`, `cards_seed`, `cards_seedkeeper`, `cards_descriptor`, `mainnet`:
 
     python3 test/run.py scan          # everything with "scan" in the name
     python3 test/run.py stock         # the three stock-firmware scans
@@ -269,9 +269,53 @@ byte, its header parsed by pysatochip and its cost checked against upstream's ow
 size arithmetic. On the day upstream fixes that import, the load check fails and
 says so.
 
+**`test_mainnet.py`** -- mainnet, on purpose. The simulator ships on Testnet and
+the page shouts when anybody moves it to Mainnet, because a seed typed into a
+browser tab has no secure element. That warning is only honest if mainnet
+actually works here, so this is the file that checks it, and it costs nothing: no
+coins, no network, nothing broadcast.
+
+The device is taken to Mainnet through Settings > Advanced, the published test
+seed goes in by camera, and an account key comes back out through the wallet's
+own Export Xpub screens at both standard mainnet paths: `m/48'/0'/0'/2'` for
+multisig and `m/84'/0'/0'` for single sig. What the wallet drew is read out of the
+QR on its screen and compared, fingerprint and all 111 characters of the key,
+against a key derived in `mainnet_reference.py`. The wallet does all of its work
+with embit; that file never imports embit and never opens a wallet zip, so
+agreement is two implementations that share no code arriving at the same key
+rather than one library agreeing with itself. A wallet still deriving under coin
+type `1'` would fail here on the origin alone.
+
+Then a mainnet transaction the test fabricates: an invented UTXO on a transaction
+that does not exist, spent to an address nobody holds the key to. It goes in as a
+base64 PSBT by camera, the wallet is driven through its own review and approve
+screens, and the signed PSBT is read back off the animated QR it displays. The
+signature is then checked offline against a BIP143 sighash computed from the
+transaction the test built: under the key at `m/84'/0'/0'/0/0` and no other,
+committed to SIGHASH_ALL, low-S, and over the transaction that went in byte for
+byte. Two of the checks are the verifier proving it can say no -- the same
+signature with one bit changed, and the same signature against the sighash of a
+transaction paying a different amount -- because a verifier that says yes to
+everything would have passed the line above them.
+
+The reel in front of the camera is changed between the seed scan and the PSBT
+scan. Chromium reopens the y4m file when a stream starts, which was measured
+rather than assumed, so replacing it between two scans is what holding up a
+different QR looks like from the wallet's side.
+
+Smartcard firmware only. Both firmwares carry the same embit, and neither the
+export screens nor the signing path is card code, so a second run would spend
+minutes proving the same thing again.
+
 ## Supporting files
 
 - `harness.py`: where to point the tests, and the log reader they share.
+- `mainnet_reference.py`: the other side of every comparison `test_mainnet.py`
+  makes. BIP39, BIP32, SLIP-132, BIP143 and ECDSA verification written out from
+  the specifications, plus RIPEMD-160, which OpenSSL 3 hides behind its legacy
+  provider and so cannot be relied on from `hashlib`. Runnable on its own
+  (`python3 test/mainnet_reference.py`), which prints the published vectors it is
+  anchored to: BIP32's test vector 1, one of BIP39's, and RIPEMD-160's own.
 - `serve.py`: a static server that sends COOP and COEP. Without cross-origin
   isolation `SharedArrayBuffer` is not constructible and the wallet hangs before
   it draws anything, so `python3 -m http.server` cannot serve this page at all.
