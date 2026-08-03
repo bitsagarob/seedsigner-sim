@@ -29,7 +29,7 @@ downloads the Pyodide runtime and builds both wallet zips from their pinned
 upstream commits, which takes a few minutes; later runs reuse all of it.
 
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
-`tray_layout`, `firmware`, `settings`, `scan_seedqr`, `scan_compact`,
+`tray_layout`, `firmware`, `build_info`, `settings`, `scan_seedqr`, `scan_compact`,
 `scan_native`, `stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`,
 `cards_browser`, `cards_seed`, `cards_seedkeeper`, `cards_descriptor`:
 
@@ -104,6 +104,22 @@ other one with the rest of the query string intact, and the card tray has to be
 **absent** under stock rather than disabled or greyed, because stock has no card
 code for a tray to control. Nothing here waits for the wallet to boot, so it
 costs seconds.
+
+**`test_build_info.py`**: the technical details panel, and the one check the page
+makes about itself. The panel is where a visitor is told what is running, so
+every value in it is compared here against something that is not the panel's own
+source: the tag, the commit and both hashes against `UPSTREAM`, the Pyodide
+version against `build/fetch-assets.sh`, and the dependency list against the
+licences manifest inside the built zip. The sha256 the panel shows for the zip
+the page received is the worker's hash of the bytes it fetched, so it is compared
+against the zip on disk, for both firmwares.
+
+Then the part that makes it a check rather than a decoration: a copy of the zip
+with one byte appended is served from a second server, in front of the real one,
+and the panel has to say the two hashes differ and show the altered file's own
+hash. `build/out` is never touched, so there is nothing to put back if this fails
+halfway. The limitation line is asserted too, because a page that quietly stopped
+saying the self-check is not proof would be claiming more than it can.
 
 **`test_settings.py`**: a setting changed through the wallet's own menus, and the
 network indicator that follows it. It exists because changing a setting did not

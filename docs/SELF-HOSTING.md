@@ -85,6 +85,7 @@ mkdir -p /srv/seedsigner-sim
 cp -r src/web/.  /srv/seedsigner-sim/     # page, scripts, icons, and pyodide/
 cp src/shims/browser_*.py /srv/seedsigner-sim/
 cp build/out/wallet-*.zip /srv/seedsigner-sim/
+cp build/out/wallet-*.build-info.json /srv/seedsigner-sim/
 ```
 
 What ends up there, and why each piece has to be exactly where it is (the page,
@@ -99,6 +100,7 @@ the worker and the shims all fetch each other by relative path):
 | `pyodide/` | `fetch-assets.sh` | ~26 MB: the runtime plus the wheels for Pillow, pycryptodome and cryptography |
 | `browser_display.py`, `browser_camera.py`, `browser_qr.py` | `src/shims/` | fetched at boot and written into Pyodide's filesystem |
 | `wallet-smartcard.zip`, `wallet-stock.zip` | `build/out/` | one per firmware, each the pinned `seedsigner` tree plus its pure-Python dependencies plus this repository's stand-in packages. Serve both: the page picks one with `?firmware=` |
+| `wallet-smartcard.build-info.json`, `wallet-stock.build-info.json` | `build/out/` | what each build is: pin, tag, published hashes, dependency versions. The page's **Technical details** panel is filled from it, and says it cannot describe the build if it is missing |
 
 The shims sit next to the page rather than inside `wallet.zip` deliberately: it
 keeps the zip exactly what the build script produced, with the seams visibly

@@ -49,8 +49,11 @@ that firmware's section of [`UPSTREAM`](../UPSTREAM) pins, the pure-Python
 dependencies it needs (embit, pysatochip, qrcode, mnemonic, urtypes, ecdsa, …),
 and, for the fork, the simulated `smartcard` package that stands in for pyscard.
 Stock's zip carries no `smartcard` package, because stock has no code that could
-import one. The zip is fetched and unpacked into Pyodide's in-memory filesystem
-at `/wallet`, which becomes the working directory.
+import one. `six` is in the fork's zip too, at the version upstream pins, rather
+than left to Pyodide to provide: ecdsa imports it, and a dependency the build
+does not name is a dependency nobody can check. The zip is fetched and unpacked
+into Pyodide's in-memory filesystem at `/wallet`, which becomes the working
+directory.
 
 The three `browser_*.py` shims are **not** in the zip. They are fetched separately
 and written into `/wallet` at boot, so the zip stays exactly what the build script

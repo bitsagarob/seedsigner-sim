@@ -24,6 +24,10 @@ function post(type, payload) {
   self.postMessage({ type, ...payload });
 }
 
+function hex(buffer) {
+  return Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 self.onmessage = async (event) => {
   const { type } = event.data;
 
@@ -56,6 +60,15 @@ async function boot(width, height) {
   // One zip per firmware, each built by build/build-wallet-zip.sh from its own
   // section of UPSTREAM and published with its own pair of hashes.
   const zip = await (await fetch(`wallet-${firmware}.zip`)).arrayBuffer();
+
+  // Hash what arrived, before unpacking it, and hand it to the page: the panel
+  // shows it beside the sha256 UPSTREAM publishes. It has to be these bytes,
+  // the ones this worker is about to unpack and run, because a hash taken from
+  // anywhere else -- build-info.json most of all -- would only be one claim
+  // repeating another.
+  const digest = await crypto.subtle.digest("SHA-256", zip);
+  post("zip-sha256", { sha256: hex(digest) });
+
   await pyodide.unpackArchive(zip, "zip", { extractDir: "/wallet" });
 
   const driver = await (await fetch("browser_display.py")).text();

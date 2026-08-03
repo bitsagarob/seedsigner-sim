@@ -736,10 +736,95 @@ if [ "${KEEP_STAGING}" = "yes" ]; then
     step "staged tree kept at ${OUT_DIR}/staging-${FIRMWARE}"
 fi
 
+# ---------------------------------------------------------------------------
+# 8. What this build is, written down for the page
+# ---------------------------------------------------------------------------
+#
+# The simulator shows a visitor what it is running: the firmware, the pin it
+# came from, the hashes to compare against, what the zip carries and which
+# Pyodide interprets it. That description has to be produced by the build, not
+# maintained beside it, or it becomes one more thing that can drift and be wrong
+# exactly when someone is checking. Every field below is read out of UPSTREAM,
+# out of the dependency table in this file, or out of build/fetch-assets.sh.
+#
+# Beside the zip and not inside it: the zip's bytes are the thing being
+# compared, and nothing added here may touch them.
+#
+# The two hashes are the ones UPSTREAM publishes, deliberately, rather than the
+# ones this run just printed. They are what a reader is asked to compare
+# against, so a build that stopped reproducing has to show up as a mismatch on
+# the page rather than quietly publishing whatever it produced.
+
+UPSTREAM_TAG="$(upstream_field tag)"
+PUBLISHED_ZIP_SHA256="$(upstream_field wallet_zip_sha256)"
+PUBLISHED_CONTENTS_SHA256="$(upstream_field wallet_zip_contents_sha256)"
+
+[ -n "${UPSTREAM_TAG}" ]               || die "no 'tag =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+[ -n "${PUBLISHED_ZIP_SHA256}" ]       || die "no 'wallet_zip_sha256 =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+[ -n "${PUBLISHED_CONTENTS_SHA256}" ]  || die "no 'wallet_zip_contents_sha256 =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+
+# The runtime is fetched by another script and pinned there, which makes that
+# script the one place the version is written down.
+ASSETS_SCRIPT="${REPO_ROOT}/build/fetch-assets.sh"
+[ -f "${ASSETS_SCRIPT}" ] || die "missing ${ASSETS_SCRIPT}"
+PYODIDE_VERSION="$(sed -n 's/^PYODIDE_VERSION="\([^"]*\)".*$/\1/p' "${ASSETS_SCRIPT}" | sed -n 1p)"
+[ -n "${PYODIDE_VERSION}" ] || die "no PYODIDE_VERSION= line in ${ASSETS_SCRIPT}"
+
+OUT_INFO="${OUT_DIR}/wallet-${FIRMWARE}.build-info.json"
+
+step "writing ${OUT_INFO}"
+INFO_FIRMWARE="${FIRMWARE}" \
+INFO_REPO="${UPSTREAM_REPO}" \
+INFO_COMMIT="${UPSTREAM_COMMIT}" \
+INFO_TAG="${UPSTREAM_TAG}" \
+INFO_ZIP="wallet-${FIRMWARE}.zip" \
+INFO_ZIP_SHA256="${PUBLISHED_ZIP_SHA256}" \
+INFO_CONTENTS_SHA256="${PUBLISHED_CONTENTS_SHA256}" \
+INFO_PYODIDE="${PYODIDE_VERSION}" \
+INFO_DEPENDENCIES="${DEPENDENCIES}" \
+python3 - "${OUT_INFO}" <<'PY'
+import json
+import os
+import sys
+
+# The same rows the build just acted on, so the list a reader is shown is the
+# list that was fetched rather than a description of it.
+dependencies = []
+for line in os.environ["INFO_DEPENDENCIES"].splitlines():
+    if not line.strip() or line.startswith("#"):
+        continue
+    kind, module, dist, release = line.split("|")[:4]
+    dependencies.append({"name": dist, "version": release,
+                         "module": module, "kind": kind})
+
+info = {
+    "firmware": os.environ["INFO_FIRMWARE"],
+    "upstream": {
+        "repo": os.environ["INFO_REPO"],
+        "commit": os.environ["INFO_COMMIT"],
+        "tag": os.environ["INFO_TAG"],
+    },
+    "wallet_zip": {
+        "name": os.environ["INFO_ZIP"],
+        "published_sha256": os.environ["INFO_ZIP_SHA256"],
+        "published_contents_sha256": os.environ["INFO_CONTENTS_SHA256"],
+    },
+    "pyodide": os.environ["INFO_PYODIDE"],
+    "dependencies": dependencies,
+}
+
+# Nothing dated, nothing about this machine, nothing from a set: two runs of
+# this script write the same bytes, the same way the zip beside it does.
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(info, handle, indent=2)
+    handle.write("\n")
+PY
+
 step "done"
 echo
 echo "  ${OUT_ZIP}"
 echo "  ${OUT_MANIFEST}"
+echo "  ${OUT_INFO}"
 echo
 echo "Compare the zip sha256 above with the wallet-${FIRMWARE}.zip you were served,"
 echo "and with the [${FIRMWARE}] section of UPSTREAM."

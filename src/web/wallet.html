@@ -83,6 +83,53 @@
     color: #f7931a; border-color: #f7931a; background: #16181c; cursor: default;
   }
   #firmware-switch button:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
+  /* The details panel, opened from under the firmware line it is about. Same
+     idiom as the switch above it and the card tray below: dark fill, thin
+     border, and Bitcoin orange only where something is on or has come out
+     right. */
+  #build { width: 100%; text-align: center; font-size: .9em; }
+  #build > summary {
+    list-style: none; display: inline-block; cursor: pointer;
+    font: inherit; color: #8b939e; background: #1d2026; border: 1px solid #2a2e35;
+    border-radius: 5px; padding: .2rem .6rem;
+  }
+  #build > summary::-webkit-details-marker { display: none; }
+  #build > summary:hover { color: #d7dbe0; border-color: #3a3f47; }
+  #build[open] > summary { color: #f7931a; border-color: #f7931a; background: #16181c; }
+  #build > summary:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
+  #build > div {
+    /* Border box, because the padding below is a fifth of a phone's width and
+       a content-box panel would push the page sideways. */
+    box-sizing: border-box; width: min(46rem, 100%);
+    margin: .6rem auto 0; text-align: left;
+    background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
+    padding: 1rem 1.25rem; color: #b6bec8;
+  }
+  #build a { color: #f7931a; }
+  #build h3 { font-size: 1em; font-weight: 600; color: #d7dbe0; margin: 1.2rem 0 .5rem; }
+  #build dl {
+    display: grid; grid-template-columns: max-content 1fr; gap: .35rem .9rem; margin: 0;
+  }
+  #build dt { color: #7c848f; }
+  #build dd { margin: 0; }
+  #build .hash {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .92em; word-break: break-all;
+  }
+  #build .deps {
+    display: flex; flex-wrap: wrap; gap: .15rem .9rem;
+    list-style: none; padding: 0; margin: .5rem 0 0;
+  }
+  /* anywhere, not break-word: it is the one that lets a 40-character commit
+     shrink the item it is in rather than widen the page. */
+  #build .deps li { overflow-wrap: anywhere; }
+  #build .deps b { color: #d7dbe0; font-weight: 500; }
+  #build .verdict {
+    margin: .8rem 0 0; border: 1px solid #2a2f36; border-radius: 6px; padding: .45rem .7rem;
+  }
+  #build .verdict[data-state=match] { color: #f7931a; border-color: #f7931a; background: #16181c; }
+  #build .verdict[data-state=differs] { color: #ef4444; border-color: #7f1d1d; background: #1b0f10; }
+  #build .limit, #build .links { margin: .6rem 0 0; color: #9aa3ae; }
   /* Empty until the wallet has said what its own settings hold. The page keeps
      no copy of this to fall back on, and a guess here would be wrong exactly
      when it matters. */
@@ -104,6 +151,9 @@
     body { padding: 1rem .75rem; gap: .75rem; }
     h1 { font-size: 1.05rem; }
     .hint { font-size: .82em; }
+    /* Two columns of a 64-character hash do not fit a phone. */
+    #build dl { grid-template-columns: 1fr; gap: 0; }
+    #build dd { margin: 0 0 .5rem; }
   }
 </style>
 </head>
@@ -142,6 +192,8 @@
         <p>Source, and a build script that rebuilds this wallet from a pinned
         upstream commit so you can check the claim above yourself:
         <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">seedsigner-sim</a>.
+        <strong>Technical details</strong>, under the device, has the pin, both
+        published hashes and everything the wallet zip carries.
         The device firmware lives in
         <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">seedsigner-os</a>.</p>
       </div>
@@ -158,6 +210,47 @@
     </div>
     <p id="firmware-line"></p>
   </div>
+  <!-- Everything the page can say about what it is running, and the one check
+       it can make about itself. Filled in from wallet-<firmware>.build-info.json,
+       which the build writes beside the zip from the pins it built from, except
+       the received hash, which comes from the worker. -->
+  <details id="build">
+    <summary>Technical details</summary>
+    <div>
+      <dl>
+        <dt>Firmware</dt><dd id="build-firmware">…</dd>
+        <dt>Upstream</dt><dd><a id="build-repo" rel="noopener"></a></dd>
+        <dt>Tag</dt><dd><a id="build-tag" rel="noopener"></a></dd>
+        <dt>Commit</dt><dd><a id="build-commit" class="hash" rel="noopener"></a></dd>
+        <dt>Interpreter</dt><dd>Pyodide <span id="build-pyodide"></span>, CPython compiled to WebAssembly</dd>
+      </dl>
+
+      <h3>The wallet zip this page loaded, <span id="build-zip"></span></h3>
+      <dl>
+        <dt>published sha256</dt><dd class="hash" id="build-published"></dd>
+        <dt>what arrived here</dt><dd class="hash" id="build-computed"></dd>
+        <dt>published contents</dt><dd class="hash" id="build-contents"></dd>
+      </dl>
+      <p class="verdict" id="build-verdict" data-state="pending"></p>
+      <p class="limit">The page is checking itself, so this is a convenience and
+      not proof: only rebuilding the zip and comparing the hash is a check that
+      does not depend on this page being honest.</p>
+
+      <h3>What is in it</h3>
+      <p>The upstream tree at the commit above, this
+      repository's stand-ins for the hardware a browser does not have, and these
+      pinned dependencies. Nothing else.</p>
+      <ul class="deps" id="build-deps"></ul>
+
+      <p class="links">Check it yourself:
+      <a href="https://github.com/bitsagarob/seedsigner-sim/blob/main/build/build-wallet-zip.sh" rel="noopener">rebuild the zip</a> ·
+      <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml" rel="noopener">the same rebuild on a clean runner</a> ·
+      <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/test.yml" rel="noopener">tests</a> ·
+      <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml" rel="noopener">upstream's own tests</a> ·
+      <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">source</a> ·
+      <a href="https://github.com/bitsagarob/seedsigner-sim/releases/latest" rel="noopener">latest release</a></p>
+    </div>
+  </details>
   <p id="status">starting…</p>
   <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
   element. Never enter a seed phrase you rely on; use a public test seed, a
@@ -201,11 +294,15 @@ const FIRMWARE_INFO = {
     button: "Smartcard fork",
     says: "Running the 3rdIteration smartcard fork of SeedSigner, tag " +
           "SeSi-0.8.7+ShSi-B11, which adds SeedKeeper and Satochip cards.",
+    panel: "the 3rdIteration fork of SeedSigner, a third party fork that adds " +
+           "SeedKeeper and Satochip cards",
   },
   stock: {
     button: "Stock SeedSigner",
     says: "Running stock SeedSigner 0.8.7, the firmware a plain SeedSigner " +
           "runs. It has no smartcard support, so there is no card tray.",
+    panel: "SeedSigner as its own project publishes it, which is what a plain " +
+           "device runs",
   },
 };
 
@@ -239,6 +336,97 @@ for (const name of FIRMWARES) {
   });
   switchEl.appendChild(button);
 }
+
+// The details panel. Everything in it that describes the build is read out of
+// wallet-<firmware>.build-info.json, which build/build-wallet-zip.sh writes
+// beside the zip from the same pins it built from, so nothing here is a second
+// copy of a fact that could drift away from the first.
+//
+// The one line that is not from that file is the one that carries any weight:
+// the sha256 of the zip bytes the worker received, which it computes over the
+// buffer it is about to unpack. Comparing that against a hash out of the same
+// place the zip came from is a check the page can honestly make about itself,
+// and nothing more than that -- which the panel says in as many words.
+let publishedHash = null;   // what UPSTREAM publishes, via build-info.json
+let receivedHash = null;    // what the worker hashed the delivered bytes to
+
+function panelText(id, text) {
+  document.getElementById(id).textContent = text;
+}
+
+function panelLink(id, text, href) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.href = href;
+}
+
+function showVerdict() {
+  const el = document.getElementById("build-verdict");
+  panelText("build-computed", receivedHash || "not loaded yet");
+  if (!publishedHash || !receivedHash) {
+    el.dataset.state = "pending";
+    el.textContent = "The zip is hashed as the wallet loads it, so this fills in "
+                   + "while the wallet is starting.";
+    return;
+  }
+  const match = publishedHash === receivedHash;
+  el.dataset.state = match ? "match" : "differs";
+  el.textContent = match
+    ? "They match: the wallet zip this page loaded is the published build, byte for byte."
+    : "They differ: the wallet zip this page loaded is not the published build. "
+      + "Do not trust anything this page shows you.";
+}
+
+// A clone URL is not a page anyone can open, so the links are built off the
+// browsable form of it.
+function repoUrl(clone) {
+  return clone.replace(/\.git$/, "");
+}
+
+function fillPanel(info) {
+  const web = repoUrl(info.upstream.repo);
+  const described = FIRMWARE_INFO[info.firmware];
+  panelText("build-firmware", info.firmware + (described ? ", " + described.panel : ""));
+  panelLink("build-repo", web.replace(/^https:\/\//, ""), web);
+  panelLink("build-tag", info.upstream.tag,
+            web + "/releases/tag/" + encodeURIComponent(info.upstream.tag));
+  panelLink("build-commit", info.upstream.commit, web + "/commit/" + info.upstream.commit);
+  panelText("build-pyodide", info.pyodide);
+  panelText("build-zip", info.wallet_zip.name);
+  panelText("build-contents", info.wallet_zip.published_contents_sha256);
+  publishedHash = info.wallet_zip.published_sha256;
+  panelText("build-published", publishedHash);
+
+  const list = document.getElementById("build-deps");
+  for (const dep of info.dependencies) {
+    const item = document.createElement("li");
+    const name = document.createElement("b");
+    name.textContent = dep.name;
+    // Whole, including the 40-character commit a git pin is versioned by. It is
+    // the pin; an abbreviation of it is something to look up rather than
+    // something to check.
+    item.append(name, " " + dep.version);
+    list.appendChild(item);
+  }
+  showVerdict();
+}
+
+// So that a panel opened in the first second says what it is waiting for
+// rather than showing an empty box.
+showVerdict();
+
+fetch(`wallet-${FIRMWARE}.build-info.json`)
+  .then((response) => {
+    if (!response.ok) throw new Error(response.status + " " + response.statusText);
+    return response.json();
+  })
+  .then(fillPanel)
+  .catch((error) => {
+    // Said plainly rather than left blank: a panel that cannot describe the
+    // build should not look like a panel describing a build with nothing in it.
+    panelText("build-firmware", `build-info.json for ${FIRMWARE} is not being `
+                              + `served, so this panel cannot say what was built (${error.message})`);
+  });
 
 // [0] = has a key been posted, [1] = which key. The worker blocks on [0].
 const shared = new SharedArrayBuffer(8);
@@ -330,6 +518,11 @@ if (!window.crossOriginIsolated) {
     } else if (type === "ready") {
       statusEl.textContent = "";
       statusEl.className = "ready";
+    } else if (type === "zip-sha256") {
+      // The worker's hash of the bytes it was served, which the panel puts
+      // beside the published one.
+      receivedHash = event.data.sha256;
+      showVerdict();
     } else if (type === "network") {
       // The wallet's own settings, read back out of them by the worker. The
       // page holds no copy and computes nothing: it repeats what it was told,

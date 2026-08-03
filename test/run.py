@@ -38,14 +38,16 @@ PY = sys.executable
 # The three scan tests run twice, once per firmware. Everything else runs once,
 # and deliberately: the card tests drive SeedKeeper and Satochip menus that stock
 # does not have, so running them against stock would not be a stricter check, it
-# would be a check of a menu tree that is not there. test_firmware.py is the one
-# exception in the other direction: it visits both firmwares itself, by name,
-# because switching between them is the thing it is about.
+# would be a check of a menu tree that is not there. test_firmware.py and
+# test_build_info.py are the exceptions in the other direction: they visit both
+# firmwares themselves, by name, because both are about what the page says of
+# whichever one is running.
 SUITE = [
     ("leak_scan", ["leak_scan.py"], False),
     ("cards", ["test_cards.py"], False),
     ("tray_layout", ["test_tray_layout.py"], True),
     ("firmware", ["test_firmware.py"], True),
+    ("build_info", ["test_build_info.py"], True),
     ("settings", ["test_settings.py"], True),
     ("scan_seedqr", ["test_scan.py"], True),
     ("scan_compact", ["test_scan.py"], True),
