@@ -1,0 +1,10 @@
+# Who may sign tags in this repository, and with which key.
+#
+# Verify a tag against it with:
+#
+#     git config gpg.ssh.allowedSignersFile .github/allowed_signers
+#     git tag -v v0.1.0
+#
+# The same key is published at https://github.com/bitsagarob.keys, so this file
+# can be checked against GitHub rather than taken on faith.
+bitsagarob@users.noreply.github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILcPIgjLNntNJs6tEchEDx9TGTknRSKE8o/QNjBYwmxF
