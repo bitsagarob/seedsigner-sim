@@ -1,5 +1,13 @@
 # SeedSigner simulator
 
+[![try it live](https://img.shields.io/badge/try%20it-live-f7931a?style=flat-square)](https://bitsaga.be/seedsigner-simulator/)
+[![wallet](https://img.shields.io/badge/wallet-SeSi--0.8.7%2BShSi--B11-blue?style=flat-square)](UPSTREAM)
+[![reproducible-build](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/reproducible-build.yml?branch=main&label=reproducible%20build&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml)
+[![tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/test.yml)
+[![upstream tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/upstream-tests.yml?branch=main&label=upstream%20tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml)
+[![release](https://img.shields.io/github/v/release/bitsagarob/seedsigner-sim?style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/releases/latest)
+[![licence](https://img.shields.io/github/license/bitsagarob/seedsigner-sim?style=flat-square)](LICENSE)
+
 The real [SeedSigner](https://seedsigner.com) firmware — the actual Python from the
 device — running in a browser tab. Its screen is a canvas, its buttons are your
 keyboard, and its camera is your webcam.
@@ -68,8 +76,6 @@ timestamps, fixed order, no build host anywhere in the output. So you can rebuil
 it yourself and compare the sha256 against the `wallet.zip` a page just served
 you. If they match, what you ran was the pinned upstream tree plus its pinned
 dependencies plus this repository's simulated smartcard package, and nothing else.
-
-[![reproducible-build](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml/badge.svg)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml)
 
 That rebuild also runs in CI, on every push, on a runner that has never seen this
 repository before and shares no cache with anything else — and it fails if either
