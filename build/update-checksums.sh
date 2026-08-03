@@ -189,7 +189,7 @@ case "${MODE}" in
 
     check)
         [ -f "${CHECKSUMS_FILE}" ] || die "missing ${CHECKSUMS_FILE}"
-        if diff -u --label "build/checksums.txt" --label "what update-checksums.sh would write" \
+        if diff -u -L "build/checksums.txt" -L "what update-checksums.sh would write" \
                 "${CHECKSUMS_FILE}" <(generate); then
             echo "build/checksums.txt matches the files it covers"
         else
