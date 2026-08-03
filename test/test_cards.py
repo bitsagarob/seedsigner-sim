@@ -41,6 +41,13 @@ from harness import check, report
 # card stack, which is the half of the fork stock does not have.
 # Last on the path, not first: the zip carries a copy of the stand-in too, and
 # the one under test is the checkout's.
+#
+# This has to happen before the card is imported, not just before it is used:
+# simulated_card reads its instruction bytes and status words out of
+# pysatochip.JCconstants rather than transcribing them, so pysatochip has to be
+# importable for the module to exist at all. That is the same thing that is true
+# in the browser, where the zip is unpacked to /wallet and the card is imported
+# from beside it.
 WALLET_ZIP = harness.find_asset("wallet-smartcard.zip")
 if WALLET_ZIP is None:
     sys.exit("no wallet-smartcard.zip: run build/build-wallet-zip.sh smartcard first")

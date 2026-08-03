@@ -1,15 +1,27 @@
-# sha256 of the third-party files that ARE committed to this repository.
+# sha256 of every committed file that ends up in front of a visitor.
 #
-# Everything else third-party is fetched and verified at build time: the wallet
+# Everything fetched is already content-addressed where it is fetched: the wallet
 # and its Python dependencies by build/build-wallet-zip.sh, the Pyodide runtime
-# by build/fetch-assets.sh. What is left in the repo is small enough to read and
-# is listed here so that "small enough to read" can be checked rather than
-# assumed.
+# by build/fetch-assets.sh. This file is the other half, the files that live in
+# the repository and are served or packaged as they are. Without it "you can read
+# all of it" is a claim about a moving target; with it, a change to any of them
+# is a line in a diff that somebody had to write on purpose.
 #
 # Check them from the repository root with either of:
 #
 #     sha256sum -c build/checksums.txt
 #     ./build/fetch-assets.sh --check
+#
+# build/build-wallet-zip.sh checks the two package directories below against this
+# file as well, before it stages either into a zip, and refuses to package a file
+# that is not listed here at all. Updating a stand-in therefore means updating
+# this file in the same commit, which is the point: the zip's hash moves when they
+# change, and a hash that moves without a diff to point at is the thing this
+# repository exists to make impossible.
+#
+#     git ls-files src/smartcard src/fakes | LC_ALL=C sort | xargs sha256sum
+#
+# regenerates the last block, for when a change to one of them is deliberate.
 #
 # jsQR 1.4.0, Apache-2.0. This is the file published as dist/jsQR.js in the npm
 # package jsqr@1.4.0, unmodified. To confirm that independently, and not just
@@ -34,3 +46,27 @@ e7279e0f91233abdf83725250c3f3b242180f57781157862974eb7dc2eb1bb93  src/web/wallet
 6d80f38a10e12d778a000ecea1c1036fe3075a708559d56b8bbf8e4678e470bc  src/web/index.html
 63981d0023b92c3f3dd438b033d62569ed2b3ba6fd13998deaeb90b96ed69cc3  src/web/wallet.html
 2e84bdc9ea48e5be912aaf9adf59868102ec4851be790bfe7c6cba006b419ac4  src/web/manifest.json
+
+# The stand-in packages, which build/build-wallet-zip.sh copies out of the working
+# tree and into a wallet zip whole. Every other input to that zip is pinned by a
+# commit sha or an artifact sha256, so these were the one way its bytes could move
+# without anything saying so: edit the simulated card, get a different zip, and
+# the only evidence was the hash it no longer matched. Both directories in full,
+# not just the files that happen to be staged, because a file added to one of them
+# lands in the zip too.
+0ed612d6aa1b9e48593fa195a41df9470b81375ea8d5bb135466a1fc0e390a53  src/fakes/README.md
+75b3b90df8552bb53df7d7e424483b2c79ceb3bd38f971a2ada2f136780ca9ae  src/fakes/RPi/GPIO.py
+38b94626c551a058fb31654e0bf3f425c29aaed19a76fb89ffb161c51ae03c8e  src/fakes/RPi/__init__.py
+eb888cf20bca98fd12ea8585357a0bcfc161c00d14496a31f53411784ee3cb88  src/fakes/pyzbar/__init__.py
+f5ba36b26dfdfe8a67fae80f6194cad107a71734d891d6213977af5ffc75369c  src/fakes/pyzbar/pyzbar.py
+5d9307b2e463c9a3911db9cd071709d00cd3dd6965fa48077cbcafdef9edb177  src/smartcard/CardConnectionObserver.py
+1a08f3f4de8b5f35cfdc920445a58fe5685edf302f440aefdb634b215d519059  src/smartcard/CardMonitoring.py
+9e40ac4e858b5c4183b74e95b414597714b59872765cf7620f8b4c465fda7985  src/smartcard/CardRequest.py
+3f09616591e0c4d0a722251b89a02ffad2c500a4283a7f5acd737d8df008a5bf  src/smartcard/CardType.py
+b35e337248b6467bd4da3b3ab17a87bf5c01b45363a1027302838e801ae1d6e0  src/smartcard/Exceptions.py
+c96aecaab78ee04ce687e97368638c5030124df143a420491d1baadbeccaf182  src/smartcard/System.py
+c6074f00c409fdfb352de57aba1cc9ee07288ad41bcb8cacc72227a32b8bd5db  src/smartcard/__init__.py
+99a4a391f1ecc3da5f0ae55e354cf02a1519ea2cbd2652a1a834f48b741500e3  src/smartcard/simulated_card.py
+d90db283c8febb151f4031007ecaff3a01e4c42dab51e27ca6f7b63e5d882ec5  src/smartcard/sw/SWExceptions.py
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  src/smartcard/sw/__init__.py
+76c5c4752c0784b1491c021730145d7b3611847aaf65281c2fc8c297e9e6b00c  src/smartcard/util.py

@@ -28,6 +28,49 @@ http.server` will not do; `test/serve.py` exists for exactly this.
 The camera additionally needs a secure context, so use `127.0.0.1` or real https.
 A LAN IP over plain http gives you a working wallet with no camera at all.
 
+### Running your own fork of SeedSigner in it
+
+The wallet the simulator runs is a pinned upstream tree, and "does my fork still
+work?" is a fair question to want answered without editing `UPSTREAM` and
+remembering to put it back. Two environment variables override the pin:
+
+```sh
+SS_COMMIT=my-branch ./build/build-wallet-zip.sh smartcard
+SS_REPO=https://github.com/you/seedsigner.git SS_COMMIT=v1.2.3 \
+    ./build/build-wallet-zip.sh smartcard
+```
+
+Either on its own is enough: a fork of the pinned repository needs only
+`SS_COMMIT`, and a repository that moved needs only `SS_REPO`. `SS_COMMIT` takes
+anything git can fetch, so a branch or a tag is fine as well as a sha; whatever it
+resolves to is read back and recorded, because a branch name is not an identity.
+Everything else is unchanged, so serve `build/out` the usual way and the page runs
+your tree.
+
+**The resulting hashes will not match the published ones, and that is the correct
+outcome.** They are the hashes of a different build. Nothing is broken, and there
+is nothing to fix by rebuilding. What would be wrong is an overridden build that
+looked like the published one, so it announces itself three times over:
+
+- the build ends with `THIS IS NOT THE PUBLISHED BUILD` and the two commits, the
+  one you asked for and the one this repository pins;
+- `wallet-<firmware>.build-info.json` gains `"published_build": false` and an
+  `override` object with the pin it departed from and this zip's own sha256, and
+  its firmware line says the same thing in a sentence;
+- the page's **Technical details** panel reads that file, so its first row says
+  it is not the published build, its Tag row says an override is not a release,
+  and its self-check goes red: *the wallet zip this page loaded is not the
+  published build*. That verdict is the panel's normal answer for a zip whose
+  hash is not the published one, and here it is telling the truth.
+
+Two things it does not do for you. The dependency table in
+`build/build-wallet-zip.sh` is this repository's reading of the pinned
+`requirements.txt`, not your fork's, so a fork that added or moved a dependency
+needs that table and `EXPECTED_TOP_LEVEL` edited too; the build fails loudly on
+the second of those rather than shipping a wallet that cannot import. And do not
+deploy an overridden build anywhere that claims to serve the published one, for
+the obvious reason.
+
 ## Finding out what it is doing
 
 Add `?debug=1` to the URL (there is a link on the page). The wallet then narrates
