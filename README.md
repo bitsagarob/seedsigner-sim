@@ -74,6 +74,11 @@ also click the buttons on the device.
 The page opens on the smartcard fork. The **Firmware** control under the device
 switches to stock and back, and `?firmware=stock` is a link straight to it.
 
+Running your own SeedSigner fork in it takes no edit to `UPSTREAM`: `SS_REPO` and
+`SS_COMMIT` override the pin for one build, and
+[CONTRIBUTING.md](CONTRIBUTING.md#running-your-own-fork-of-seedsigner-in-it) has
+the worked example and what the resulting hashes mean.
+
 ## What it is, and how to verify it
 
 - **It is the firmware, not a re-creation.** `wallet-<firmware>.zip` holds that
