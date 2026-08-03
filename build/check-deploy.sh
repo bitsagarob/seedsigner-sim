@@ -21,7 +21,7 @@
 # So there are four questions here, and each is asked of every box:
 #
 #   1. is every file the page needs there, and are its bytes this repository's?
-#   2. do the two served zips hash to what UPSTREAM publishes?
+#   2. does every served zip hash to what UPSTREAM publishes?
 #   3. does every URL the served pages and scripts name actually resolve?
 #   4. do the boxes serve the same bytes as each other?
 #
@@ -31,10 +31,10 @@
 # a file the web server cannot read, shows up here.
 #
 # Requires: bash, curl, sha256sum (or shasum), and ssh to any box that is not
-# this one. No venv, nothing to install, nothing to build -- except the two
+# this one. No venv, nothing to install, nothing to build -- except the
 # build-info.json files, which are build output and are compared against
-# build/out. Run build/build-wallet-zip.sh first, or those two report that they
-# have nothing to compare against.
+# build/out. Run build/build-wallet-zip.sh first, or those report that they have
+# nothing to compare against.
 #
 # Pyodide is deliberately not compared byte for byte: it is 26 MB per box of
 # somebody else's release, build/fetch-assets.sh already hash-checks it where it
