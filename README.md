@@ -62,125 +62,78 @@ also click the buttons on the device.
 
 ## What makes it different
 
-**It is the firmware, not a re-creation.** There is no reimplementation of
-SeedSigner here — no rewritten screens, no mock flows. `wallet.zip` contains the
-upstream Python tree, and the wallet's own `Controller.start()` is what runs. The
-menus, the seed handling, the PSBT parsing, the QR encoders: all theirs, unmodified.
+- **It is the firmware, not a re-creation.** `wallet.zip` holds the upstream Python
+  tree and the wallet's own `Controller.start()` runs it. Menus, seed handling,
+  PSBT parsing, QR encoders: all theirs, unmodified.
+- **Nothing patches the wallet.** The four places it reaches for hardware are
+  replaced from the outside, by the modules in [`src/shims/`](src/shims). That is
+  the one claim worth checking rather than believing.
+- **Pinned to a release, not a branch tip.** [`UPSTREAM`](UPSTREAM) names the tag
+  `SeSi-0.8.7+ShSi-B11` (`662d9dba…`) — the same tag the official pi0-smartcard
+  device image is built from, so this and a physical device run the same code. A
+  branch tip can be rebased out from under a pin; a tag cannot.
+- **You can rebuild it and compare.** `build/build-wallet-zip.sh` reproduces
+  `wallet.zip` byte for byte — fixed timestamps, fixed order, no build host in the
+  output. If your hash matches the file a page served you, what you ran was the
+  pin, its pinned dependencies and this repository's simulated card, and nothing
+  else.
+- **A machine re-derives that hash on every push**, on a runner that has never seen
+  this repository and shares no cache with anything — and GitHub signs the result:
+  `gh attestation verify wallet.zip --repo bitsagarob/seedsigner-sim`.
+- **Upstream's own tests run against our pinned versions.** CI clones SeedSigner's
+  22,000-line suite from the same commit and runs 949 of its tests
+  ([`upstream-tests.yml`](.github/workflows/upstream-tests.yml)); nothing is
+  vendored and none of it goes near `wallet.zip`. One file of 50 is not collected:
+  it is hardware-in-the-loop, wants a physical card reader, and skips itself
+  entirely without one.
+- **The webcam really is the camera.** Same `DecodeQR`, same SeedQR / CompactSeedQR
+  / PSBT / UR parsing the device does. Only the decoder underneath is the
+  browser's, because there is no zbar in WebAssembly.
+- **Nothing leaves the tab.** The content security policy allows no outbound
+  connections and there is no backend to send anything to. Once loaded, it runs
+  with the network off.
 
-**You can check that for yourself.** The wallet is pinned in
-[`UPSTREAM`](UPSTREAM) to a single commit of
-[3rdIteration/seedsigner](https://github.com/3rdIteration/seedsigner), the release
-tag `SeSi-0.8.7+ShSi-B11` (`662d9dba2327eb77d6924ae9bd62d4902bf24634`), and
-`build/build-wallet-zip.sh` rebuilds `wallet.zip` from it reproducibly — fixed
-timestamps, fixed order, no build host anywhere in the output. So you can rebuild
-it yourself and compare the sha256 against the `wallet.zip` a page just served
-you. If they match, what you ran was the pinned upstream tree plus its pinned
-dependencies plus this repository's simulated smartcard package, and nothing else.
-
-That rebuild also runs in CI, on every push, on a runner that has never seen this
-repository before and shares no cache with anything else — and it fails if either
-hash in [`UPSTREAM`](UPSTREAM) no longer comes back out. So the numbers you are
-being asked to compare against are re-derived by a machine rather than by
-whoever last remembered to.
-
-A released tag rather than a branch tip, for two reasons: a tip can be rebased out
-from under the pin, leaving a sha nobody can fetch any more, and that tag is the
-one the official pi0-smartcard device image is built from — so the code here and
-the code on a physical device are the same code.
-
-If the zip hashes differ but the *contents* hash printed alongside matches, the
-two builds hold the same files and differ only in compression — some
-distributions ship zlib-ng, whose deflate output is not byte-identical to stock
-zlib. That is a packaging difference, not a code difference, and
-`wallet.zip.manifest` lists a sha256 per file so you can find out which it is.
-
-Nothing here patches the wallet: the four places it reaches for hardware are
-replaced from the outside, by the modules in [`src/shims/`](src/shims). That is
-the whole point of the build script, and it is the one claim worth checking
-rather than believing.
-
-**Upstream's own tests run here, against our dependency versions.** SeedSigner
-ships a 22,000-line test suite. CI clones it from the same pinned commit the
-wallet is built from and runs it
-([`upstream-tests.yml`](.github/workflows/upstream-tests.yml)) — nothing is
-vendored, no test file lives in this repository, and none of it goes anywhere
-near `wallet.zip`. Two things make that worth doing. The wallet's behaviour is
-checked by the tests written by the people who wrote the wallet, rather than only
-by tests we invented for code we did not write. And because
-`build/build-wallet-zip.sh` chooses its own versions of embit, ecdsa, pysatochip
-and the rest, this is what catches those pins drifting away from what upstream's
-code actually expects: the day they do, one of upstream's own tests goes red and
-names the behaviour that changed.
-
-To be exact about what that covers, since a vague claim here would be worse than
-none: one upstream file of 50 tests is not collected. It is
-`tests/test_smartcard_hardware.py`, which its own docstring calls
-hardware-in-the-loop and which wants a physical card reader and a blank JavaCard,
-so every one of its tests skips itself on a machine that has neither. The other
-949 run. A few of those skip themselves where something optional is missing — the
-translation files this build does not ship, for instance — and the job prints
-every skip with its reason rather than folding it into a total.
-
-**The webcam really is the camera.** Point it at a SeedQR and the wallet loads the
-seed — the same `DecodeQR`, the same SeedQR / CompactSeedQR / PSBT / UR parsing the
-device does. Only the decoder underneath it is the browser's, because SeedSigner
-reads QR codes with pyzbar and there is no zbar in WebAssembly.
-
-**Nothing leaves the tab.** The page's content security policy allows no outbound
-connections, and there is no backend to send anything to. Once loaded, it runs with
-the network off.
+> If the zip hashes differ but the **contents** hash matches, the two builds hold
+> the same files and differ only in compression — some distributions ship zlib-ng.
+> That is packaging, not code; `wallet.zip.manifest` lists a sha256 per file.
 
 ## What works, and what does not
 
-Working: the full menu tree, seed loading by QR or by hand, passphrases, xpub
-export, PSBT loading and signing, SeedQR backup, settings, and every screen that
-draws a QR.
+**Works**
 
-The smartcard tray holds three cards, and each can be a **SeedKeeper** or a
-**Satochip** — you choose before you put it in, and SeedKeeper is the default
-because that is the card the device ships with. Either can be initialised with a
-PIN and will check that PIN when asked.
+- The full menu tree, seed loading by QR or by hand, passphrases, xpub export,
+  PSBT loading and signing, SeedQR backup, settings, every screen that draws a QR.
+- Three card slots. Each holds a **SeedKeeper** or a **Satochip** — your choice
+  before you insert it, SeedKeeper by default, since that is the card the device
+  ships with. Either takes a PIN and checks it.
+- **SeedKeeper, end to end:** *Backup seed → To SeedKeeper* puts a seed on the
+  card, *Seeds → Load a seed → From SeedKeeper* reads it back off.
+- **Satochip:** holds a real BIP32 master key and a real authentikey, and
+  pysatochip verifies every answer it signs.
 
-- **A SeedKeeper** stores labelled secrets and gives them back under the export
-  rights they were stored with. The two flows the product exists for both work
-  end to end through the wallet's own screens: **Backup seed → To SeedKeeper**
-  saves a seed onto the card, and **Seeds → Load a seed → From SeedKeeper** reads
-  one back off it.
-- **A Satochip** takes a seed and derives from it. The card holds a real BIP32
-  master key and a real authentikey, and pysatochip verifies every answer it
-  signs.
+**Does not**
 
-Not working, and worth knowing before you go looking:
-
-- **The wallet's own "Initialise with Seed" screen**, on the Satochip side. The
-  card takes the seed and derives from it correctly, and the tray says so, but the
-  screen that asked for it reports a failure: at the pinned tag
-  `ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value
-  into three, and on this backend that method returns one thing — the
-  authentikey. So a successful import is what raises. That is upstream's bug,
-  still present on their `dev` tip, and nothing here works around it. Reading the
-  seed back off the card afterwards works.
-- **Moving a secret from one SeedKeeper to another.** That is an *encrypted*
-  export, done under a session key negotiated with the second card's public key,
-  and there is no second card in the reader to negotiate with. It comes back "not
-  supported" rather than being quietly done in the clear.
-- **Card signing.** PSBT and message signing on the card, PIN change and unblock,
-  2FA, factory reset and the card-management screens all come back "not
-  supported" — see [THIRD-PARTY.md](THIRD-PARTY.md) for the GlobalPlatform half.
-- **A card that remembers.** Card state is in memory only, so a page reload gives
-  you factory-fresh cards. Deliberately: nothing you do here should outlive
-  the tab.
-- **microSD.** There is no card slot to emulate, so anything routed through one —
-  settings surviving a reload, firmware update flows — does not happen. Settings
-  live in an in-memory filesystem and reset when you reload the page.
-- **Anything drawn from a background thread.** This environment has no threads, so
-  animations do not animate: no spinner, no scrolling long text, no pulsing warning
-  border. The two that carry information — the live camera preview and the
-  animated-QR display — are pumped by hand instead. Features that do their work in
-  a thread, such as brute-force address verification, will not complete.
+- **"Initialise with Seed" on the Satochip side — upstream's bug, not ours.**
+  `ToolsSatochipImportSeedView` unpacks three values from
+  `card_bip32_import_seed()`, which returns one, so a *successful* import is what
+  raises. Still present on their `dev` tip; nothing here works around it. The card
+  is seeded regardless and reading it back works.
+- **Copying a secret from one SeedKeeper to another** — an encrypted exchange
+  needing a second card to negotiate a session key with. Refused rather than
+  quietly done in the clear.
+- **Card signing**, PIN change and unblock, 2FA, factory reset and the
+  card-management screens: all answer "not supported".
+- **Cards that remember.** State is in memory only, so a reload gives factory-fresh
+  cards. Deliberate — nothing you do here should outlive the tab.
+- **microSD.** No slot to emulate, so settings reset on reload and the firmware
+  update flows do not happen.
+- **Anything drawn from a background thread.** No threads here: no spinner, no
+  scrolling long text, no pulsing warning border. The two animations that carry
+  information — camera preview, animated QR — are pumped by hand. Thread-based
+  work such as brute-force address verification never completes.
 - **Timing-based behaviour.** No wipe timer, no screensaver, no battery readings.
-- **Real security properties.** Obviously. A browser tab is not an air gap, and
-  Pyodide's filesystem is not a secure element.
+- **Real security properties.** A browser tab is not an air gap, and Pyodide's
+  filesystem is not a secure element.
 
 ## How it works
 
