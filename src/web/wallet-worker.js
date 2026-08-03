@@ -190,6 +190,35 @@ class _NoThread:
 
 threading.Thread = _NoThread
 
+
+class _NoTimer:
+    """
+    Stand-in for threading.Timer.
+
+    Settings.save() debounces its write behind a Timer, and it is the only
+    Timer in the wallet. With no timers the write never happens and changing
+    any setting, the network among them, raises on the settings screen. There
+    is nothing to debounce in here, so the callback runs inline on start().
+    """
+
+    def __init__(self, interval, function, args=None, kwargs=None):
+        self.interval, self._function = interval, function
+        self._args, self._kwargs = args or (), kwargs or {}
+        self.name, self.daemon = "notimer", None
+
+    def start(self):
+        js_log(f"timer inline: {getattr(self._function, '__name__', None)}")
+        try:
+            self._function(*self._args, **self._kwargs)
+        except Exception as exc:
+            js_log(f"inline timer failed: {type(exc).__name__}: {exc}")
+
+    def cancel(self): pass
+    def join(self, timeout=None): pass
+    def is_alive(self): return False
+
+threading.Timer = _NoTimer
+
 # --- pycryptodomex is pycryptodome under another name ------------------------
 class _CryptodomeAlias(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):

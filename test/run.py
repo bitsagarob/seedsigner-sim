@@ -43,6 +43,7 @@ SUITE = [
     ("leak_scan", ["leak_scan.py"], False),
     ("cards", ["test_cards.py"], False),
     ("tray_layout", ["test_tray_layout.py"], True),
+    ("settings", ["test_settings.py"], True),
     ("scan_seedqr", ["test_scan.py"], True),
     ("scan_compact", ["test_scan.py"], True),
     ("scan_native", ["test_scan_native.py"], True),
