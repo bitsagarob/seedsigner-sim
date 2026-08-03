@@ -8,7 +8,8 @@ hour it takes to discover them.
 
 ```sh
 ./build/fetch-assets.sh                                  # Pyodide, pinned and hash-checked
-./build/build-wallet-zip.sh                              # wallet.zip from the commit in UPSTREAM
+./build/build-wallet-zip.sh smartcard                    # from the [smartcard] pin in UPSTREAM
+./build/build-wallet-zip.sh stock                        # from the [stock] pin in UPSTREAM
 python3 test/serve.py --port 8770 src/web src/shims build/out
 ```
 

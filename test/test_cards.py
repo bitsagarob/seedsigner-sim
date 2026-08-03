@@ -31,14 +31,16 @@ import harness
 from harness import check, report
 
 # The card's crypto is embit's, and the client that has to accept what it answers
-# is pysatochip's own parser. Both ship inside wallet.zip rather than being
-# installed anywhere, and zipimport reads a pure-Python package straight out of
-# one -- so this is the same copy the browser runs, not a lookalike from PyPI.
+# is pysatochip's own parser. Both ship inside the smartcard wallet zip rather
+# than being installed anywhere, and zipimport reads a pure-Python package
+# straight out of one -- so this is the same copy the browser runs, not a
+# lookalike from PyPI. The smartcard zip specifically: pysatochip is part of the
+# card stack, which is the half of the fork stock does not have.
 # Last on the path, not first: the zip carries a copy of the stand-in too, and
 # the one under test is the checkout's.
-WALLET_ZIP = harness.find_asset("wallet.zip")
+WALLET_ZIP = harness.find_asset("wallet-smartcard.zip")
 if WALLET_ZIP is None:
-    sys.exit("no wallet.zip: run build/build-wallet-zip.sh first")
+    sys.exit("no wallet-smartcard.zip: run build/build-wallet-zip.sh smartcard first")
 sys.path.append(WALLET_ZIP)
 
 from embit import bip32, bip39

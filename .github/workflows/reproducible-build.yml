@@ -1,12 +1,13 @@
-# Rebuilds wallet.zip on a clean runner and fails if it is not the file UPSTREAM
-# says it is.
+# Rebuilds both wallet zips on a clean runner and fails if either is not the
+# file UPSTREAM says it is.
 #
-# The most interesting claim this repository makes is that wallet.zip is the
+# The most interesting claim this repository makes is that a wallet zip is the
 # pinned upstream SeedSigner tree plus its pinned dependencies and nothing else,
 # and that anyone can rebuild it and get the same bytes. UPSTREAM publishes both
-# hashes for exactly that comparison. Until now nothing enforced them: they were
-# checked when somebody remembered, and they had already drifted once before
-# anybody noticed. A published hash nobody re-derives is a claim, not a check.
+# hashes, for both firmwares, for exactly that comparison. Until now nothing
+# enforced them: they were checked when somebody remembered, and they had
+# already drifted once before anybody noticed. A published hash nobody
+# re-derives is a claim, not a check.
 #
 # Its own workflow rather than a job in test.yml, for three reasons. It answers a
 # different question -- "is the build still what UPSTREAM says it is" rather than
@@ -36,9 +37,22 @@ permissions:
 jobs:
   rebuild:
     runs-on: ubuntu-24.04
-    # Cloning upstream and fourteen dependencies and writing the zip. Minutes,
-    # but nothing here boots a browser.
+    # Cloning upstream and its dependencies and writing the zip. Minutes, but
+    # nothing here boots a browser.
     timeout-minutes: 20
+
+    # A matrix rather than two jobs or a loop inside one. The steps are
+    # identical for both firmwares down to the last character, with the name
+    # substituted in three places, so the alternative is copying forty lines and
+    # maintaining them in parallel forever. It also buys the thing a loop would
+    # not: two independently named results, so a red mark says which firmware
+    # stopped reproducing without anyone opening the log.
+    strategy:
+      # Both are asked, always. Knowing that only one of them moved is most of
+      # the diagnosis, and fail-fast would throw that away.
+      fail-fast: false
+      matrix:
+        firmware: [smartcard, stock]
 
     steps:
       - uses: actions/checkout@v4
@@ -61,27 +75,40 @@ jobs:
       # does not reuse a PyPI artifact from the runner's home directory either.
       # Every byte that goes into the zip is fetched and hash-checked in this
       # run, which is the only thing that says anything about a fresh clone.
-      - name: Rebuild wallet.zip from the pin
-        run: ./build/build-wallet-zip.sh --no-cache
+      - name: Rebuild the ${{ matrix.firmware }} wallet zip from the pin
+        run: ./build/build-wallet-zip.sh ${{ matrix.firmware }} --no-cache
 
       - name: Compare against the hashes published in UPSTREAM
+        env:
+          FIRMWARE: ${{ matrix.firmware }}
         run: |
           set -euo pipefail
 
           # Read out of UPSTREAM rather than written down here: one place to
           # look, one place to change, and a copy in a workflow would be one more
-          # number able to drift. Same awk idiom the build script reads the pin
-          # with.
-          expected_zip="$(awk -F= '/^[[:space:]]*wallet_zip_sha256[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
-          expected_contents="$(awk -F= '/^[[:space:]]*wallet_zip_contents_sha256[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
-          [ -n "${expected_zip}" ]      || { echo "no wallet_zip_sha256 in UPSTREAM" >&2; exit 1; }
-          [ -n "${expected_contents}" ] || { echo "no wallet_zip_contents_sha256 in UPSTREAM" >&2; exit 1; }
+          # number able to drift. Same section-aware awk idiom the build script
+          # reads the pin with, and section-aware for the same reason: UPSTREAM
+          # describes two firmwares, and a parser that ignored the headers would
+          # cheerfully compare this build against the other one's hash.
+          field() {
+            awk -F= -v want="[${FIRMWARE}]" -v key="$1" '
+                /^\[/   { inside = ($0 == want); next }
+                inside && $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+                    gsub(/[[:space:]]/, "", $2); print $2
+                }
+            ' UPSTREAM
+          }
 
-          actual_zip="$(sha256sum build/out/wallet.zip | cut -d' ' -f1)"
-          # wallet.zip.manifest is the (sha256, path) listing the build writes
-          # beside the zip, so its own sha256 is the contents hash the script
-          # printed a moment ago.
-          actual_contents="$(sha256sum build/out/wallet.zip.manifest | cut -d' ' -f1)"
+          expected_zip="$(field wallet_zip_sha256)"
+          expected_contents="$(field wallet_zip_contents_sha256)"
+          [ -n "${expected_zip}" ]      || { echo "no wallet_zip_sha256 in UPSTREAM [${FIRMWARE}]" >&2; exit 1; }
+          [ -n "${expected_contents}" ] || { echo "no wallet_zip_contents_sha256 in UPSTREAM [${FIRMWARE}]" >&2; exit 1; }
+
+          actual_zip="$(sha256sum "build/out/wallet-${FIRMWARE}.zip" | cut -d' ' -f1)"
+          # The .manifest is the (sha256, path) listing the build writes beside
+          # the zip, so its own sha256 is the contents hash the script printed a
+          # moment ago.
+          actual_contents="$(sha256sum "build/out/wallet-${FIRMWARE}.zip.manifest" | cut -d' ' -f1)"
 
           # Printed whether this passes or fails: someone comparing a download
           # against this run should not have to make it fail to see the numbers.
@@ -90,12 +117,12 @@ jobs:
 
           if [ "${actual_zip}" = "${expected_zip}" ] && \
              [ "${actual_contents}" = "${expected_contents}" ]; then
-            echo "both match UPSTREAM: a clean rebuild of the pin is byte for byte the published wallet.zip"
+            echo "both match UPSTREAM [${FIRMWARE}]: a clean rebuild of the pin is byte for byte the published wallet-${FIRMWARE}.zip"
             exit 0
           fi
 
           echo >&2
-          echo "this build does not reproduce the hashes published in UPSTREAM" >&2
+          echo "this build does not reproduce the hashes published in UPSTREAM [${FIRMWARE}]" >&2
           echo >&2
           echo "  zip       expected ${expected_zip}" >&2
           echo "            actual   ${actual_zip}" >&2
@@ -114,25 +141,27 @@ jobs:
           else
             echo "The contents hash differs too, so the files themselves are not the same:" >&2
             echo "this is a code difference, not a packaging one. The uploaded" >&2
-            echo "wallet.zip.manifest lists a sha256 per file; diff it against the manifest" >&2
-            echo "from a build that matched to find out which files moved." >&2
+            echo "wallet-${FIRMWARE}.zip.manifest lists a sha256 per file; diff it against" >&2
+            echo "the manifest from a build that matched to find out which files moved." >&2
           fi
           exit 1
 
       # Having re-derived the published hash, say so in a form that is not our
-      # word for it. GitHub signs a statement that this exact wallet.zip came out
-      # of this workflow, at this commit, and records it against the repository;
-      # `gh attestation verify wallet.zip --repo bitsagarob/seedsigner-sim`
+      # word for it. GitHub signs a statement that this exact file came out of
+      # this workflow, at this commit, and records it against the repository;
+      # `gh attestation verify wallet-smartcard.zip --repo bitsagarob/seedsigner-sim`
       # checks it against a file you downloaded, with nothing from us involved.
+      # Both firmwares are attested, each by its own matrix leg, because both are
+      # served and either one is a file somebody may want to check.
       #
       # Push only. A pull request from a fork runs without the write permissions
       # this needs, and a step that cannot work there should be skipped rather
       # than left to fail and teach people to ignore a red mark.
-      - name: Attest that this workflow produced this wallet.zip
+      - name: Attest that this workflow produced this wallet zip
         if: github.event_name == 'push'
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: build/out/wallet.zip
+          subject-path: build/out/wallet-${{ matrix.firmware }}.zip
 
       # Only useful when the comparison above went red, and then it is the whole
       # of the investigation: which file differs, rather than that one does.
@@ -140,7 +169,9 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: wallet-zip-manifest
-          path: build/out/wallet.zip.manifest
+          # Per firmware: two matrix legs cannot both upload an artifact under
+          # the same name.
+          name: wallet-zip-manifest-${{ matrix.firmware }}
+          path: build/out/wallet-${{ matrix.firmware }}.zip.manifest
           if-no-files-found: ignore
           retention-days: 14

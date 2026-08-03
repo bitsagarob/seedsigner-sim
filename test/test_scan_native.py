@@ -32,10 +32,10 @@ from harness import Log, check, report
 
 from playwright.sync_api import sync_playwright
 
-SHOT = harness.artifact("scan-proof-native-compact.png")
+SHOT = harness.firmware_artifact("scan-proof-native-compact.png")
 # The device's screen on its own, which is what run.py's same_seed step compares
 # against the two jsQR scans. The screenshot beside it is for looking at.
-SCREEN = harness.artifact("scan-screen-native-compact.png")
+SCREEN = harness.firmware_artifact("scan-screen-native-compact.png")
 
 # 24 bytes once UTF-8 encoded, which DecodeQR would accept as a CompactSeedQR
 # length. Chosen to be exactly the shape of payload that used to slip through.

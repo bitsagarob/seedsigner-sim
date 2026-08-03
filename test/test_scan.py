@@ -26,12 +26,14 @@ from playwright.sync_api import sync_playwright
 # raw-bytes CompactSeedQR. Both encode the same seed, so both must land on the
 # same fingerprint.
 KIND = os.environ.get("QR_KIND", "qr")
+# The videos are the same for both firmwares: one file, one seed, held up to
+# whichever wallet is running.
 Y4M = harness.artifact(f"{KIND}.y4m")
-SHOT = harness.artifact(f"scan-proof-{KIND}.png")
-PREVIEW_SHOT = harness.artifact(f"scan-preview-{KIND}.png")
+SHOT = harness.firmware_artifact(f"scan-proof-{KIND}.png")
+PREVIEW_SHOT = harness.firmware_artifact(f"scan-preview-{KIND}.png")
 # The device's screen on its own, which is what run.py's same_seed step compares
 # across the three scans. The screenshot beside it is for looking at.
-SCREEN = harness.artifact(f"scan-screen-{KIND}.png")
+SCREEN = harness.firmware_artifact(f"scan-screen-{KIND}.png")
 
 
 def main() -> int:

@@ -120,6 +120,15 @@ if ("serviceWorker" in navigator) {
 // the console, which is what the tests read, but it is noise for anyone else.
 const DEBUG = new URLSearchParams(location.search).has("debug");
 
+// Which firmware to run. Two are built: "smartcard" is the 3rdIteration fork
+// with SeedKeeper and Satochip support, which is what this page has always run
+// and stays the default; "stock" is SeedSigner as its own project publishes it.
+// ?firmware=stock picks the other one. Checked against the list rather than
+// interpolated, so the URL cannot name a file to fetch.
+const FIRMWARES = ["smartcard", "stock"];
+const asked = new URLSearchParams(location.search).get("firmware");
+const FIRMWARE = FIRMWARES.includes(asked) ? asked : FIRMWARES[0];
+
 let W = 320, H = 240;  // corrected by the worker once the renderer exists
 const canvas = document.getElementById("screen");
 const deviceEl = document.getElementById("device");
@@ -225,7 +234,7 @@ if (!window.crossOriginIsolated) {
 
   worker.postMessage({
     type: "init", sharedBuffer: shared, cameraBuffer, cardBuffer,
-    width: W, height: H, debug: DEBUG,
+    width: W, height: H, debug: DEBUG, firmware: FIRMWARE,
   });
 
   document.addEventListener("keydown", (event) => {

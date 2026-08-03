@@ -1,10 +1,17 @@
 # Runs the browser suite on every push and pull request.
 #
-# The two things this needs are not in the repo. wallet.zip is built from a
-# pinned upstream SeedSigner commit, and the Pyodide runtime is 26MB of someone
-# else's release; committing either would mean the tests could pass against a
-# stale copy of the thing they are meant to be testing. Both are produced by the
-# scripts in build/ and cached by their pinned inputs.
+# The things this needs are not in the repo. The two wallet zips are built from
+# pinned upstream SeedSigner commits, and the Pyodide runtime is 26MB of someone
+# else's release; committing any of them would mean the tests could pass against
+# a stale copy of the thing they are meant to be testing. All are produced by
+# the scripts in build/ and cached by their pinned inputs.
+#
+# One job, not a matrix. The suite is one suite: test/run.py drives the three
+# scan tests against both firmwares and the card tests against the smartcard
+# fork only, off one server serving both zips, and its same_seed step compares
+# captures that only exist because the runs before it produced them. Splitting
+# that across two runners would mean building both zips twice and inventing a
+# way to carry screenshots between legs, to answer a question nobody asked.
 name: test
 
 on:
@@ -45,11 +52,12 @@ jobs:
 
       # fetch-assets.sh needs curl and python3; build-wallet-zip.sh also needs
       # git. All three are on the runner image already.
-      - name: Build wallet.zip and fetch the Pyodide runtime
+      - name: Build both wallet zips and fetch the Pyodide runtime
         if: steps.assets.outputs.cache-hit != 'true'
         run: |
           ./build/fetch-assets.sh
-          ./build/build-wallet-zip.sh
+          ./build/build-wallet-zip.sh smartcard
+          ./build/build-wallet-zip.sh stock
 
       - name: Install Playwright
         run: |

@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 #
-# Build wallet.zip -- the Python tree the simulator unpacks into the Pyodide
+# Build a wallet zip: the Python tree the simulator unpacks into the Pyodide
 # filesystem at runtime.
 #
-# The point of this script is that you do not have to trust the wallet.zip that
-# is being served to you. Run it, and compare its sha256 to the one you
-# downloaded. If they match, the served zip is exactly the pinned upstream
-# SeedSigner tree plus the pinned pure-Python dependencies plus this repo's fake
-# smartcard package, and nothing else.
+# There are two firmwares and therefore two zips, and the firmware is the one
+# required argument:
 #
-#   ./build/build-wallet-zip.sh
-#   sha256sum some-downloaded-wallet.zip
+#   ./build/build-wallet-zip.sh smartcard    ->  wallet-smartcard.zip
+#   ./build/build-wallet-zip.sh stock        ->  wallet-stock.zip
+#
+# No default, deliberately. They are equally first-class, they pin different
+# repositories, and a script that guessed would eventually hand somebody the
+# other one's hash to compare against.
+#
+# The point of this script is that you do not have to trust the zip that is
+# being served to you. Run it, and compare its sha256 to the one you downloaded.
+# If they match, the served zip is exactly the pinned upstream SeedSigner tree
+# plus the pinned pure-Python dependencies plus this repository's own stand-in
+# packages for the hardware it cannot have, and nothing else.
+#
+#   ./build/build-wallet-zip.sh smartcard
+#   sha256sum some-downloaded-wallet-smartcard.zip
 #
 # For that comparison to mean anything the build has to be reproducible, so:
 #
@@ -46,14 +56,21 @@ KEEP_STAGING="no"
 
 usage() {
     cat <<'USAGE'
-Usage: build-wallet-zip.sh [options]
+Usage: build-wallet-zip.sh FIRMWARE [options]
 
-  --out DIR        Write wallet.zip here (default: <repo>/build/out)
+  FIRMWARE         Which wallet to build, and which section of UPSTREAM to read
+                   its pin from. One of:
+                     smartcard   the 3rdIteration fork, with SeedKeeper and
+                                 Satochip support   ->  wallet-smartcard.zip
+                     stock       SeedSigner as its own project publishes it
+                                                    ->  wallet-stock.zip
+
+  --out DIR        Write the zip here (default: <repo>/build/out)
   --cache DIR      Cache downloaded PyPI artifacts here
                    (default: $XDG_CACHE_HOME/seedsigner-sim-build)
   --no-cache       Download everything fresh, cache nothing
   --keep-staging   Leave the assembled tree in the output directory, for
-                   diffing against an unpacked wallet.zip
+                   diffing against an unpacked wallet zip
   -h, --help       This message
 
 Environment:
@@ -63,6 +80,8 @@ Environment:
 USAGE
 }
 
+FIRMWARE=""
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --out)          OUT_DIR="$2"; shift 2 ;;
@@ -70,9 +89,18 @@ while [ "$#" -gt 0 ]; do
         --no-cache)     CACHE_DIR=""; shift ;;
         --keep-staging) KEEP_STAGING="yes"; shift ;;
         -h|--help)      usage; exit 0 ;;
-        *)              echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+        -*)             echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *)
+            [ -z "${FIRMWARE}" ] || { echo "only one firmware at a time: already have ${FIRMWARE}, then got $1" >&2; exit 2; }
+            FIRMWARE="$1"; shift ;;
     esac
 done
+
+case "${FIRMWARE}" in
+    smartcard|stock) ;;
+    "")  echo "which firmware? one of: smartcard stock" >&2; usage >&2; exit 2 ;;
+    *)   echo "no such firmware: ${FIRMWARE} (one of: smartcard stock)" >&2; exit 2 ;;
+esac
 
 die() {
     echo "build-wallet-zip: $*" >&2
@@ -118,14 +146,28 @@ fi
 #
 #   kind      pypi (fetch an artifact by URL, verify sha256)
 #             git  (clone and check out a commit, verified by git itself)
-#   module    what lands at the top level of wallet.zip: a package directory or
-#             a single .py file
+#   module    what lands at the top level of the zip: a package directory or a
+#             single .py file
 #   dist      distribution name, used to name its licence file
 #   release   version, or the commit for git pins
 #   url       artifact URL, or clone URL
 #   integrity sha256 of the artifact, or the full commit sha
 #   subpath   directory inside the unpacked source that contains `module`
 #
+# One table per firmware, because the two firmwares pin different sets: the
+# smartcard fork needs the whole card stack, stock needs three libraries. They
+# are written out separately rather than expressed as a base plus a delta. Two
+# lists a reader can check line by line against two requirements.txt files beat
+# a mechanism that computes the same lists and has to be understood first.
+#
+# EXPECTED_TOP_LEVEL beside each is everything that must be at the top level of
+# the finished zip, and nothing else. Checked before the zip is written, so a
+# dependency that silently failed to unpack stops the build instead of shipping
+# a wallet that cannot import.
+
+case "${FIRMWARE}" in
+smartcard)
+
 # Deliberately NOT in this table, and why:
 #
 #   Pillow, pycryptodomex, cryptography, cffi, pycparser
@@ -138,8 +180,10 @@ fi
 #       A C extension binding PC/SC. This is one of the four hardware seams:
 #       src/smartcard/ in this repo deliberately shadows it with a fake card.
 #   pyzbar
-#       Binds libzbar. decode_qr.py imports it inside a try/except and sets it
-#       to None, and QR decoding happens in JavaScript (jsQR) instead.
+#       Binds libzbar. This fork's decode_qr.py imports it inside a try/except
+#       and sets it to None, so nothing has to stand in for it here; QR decoding
+#       happens in JavaScript (jsQR) instead. Stock imports it unguarded, which
+#       is why the stock table below does have to ship a stand-in.
 #   smbus2, periphery
 #       I2C and GPIO. There is no /dev/i2c in a browser. battery_hat.py guards
 #       both imports, so leaving them out is what makes the simulator correctly
@@ -182,9 +226,6 @@ git|specter_card|specter-card|06dcde629cdc1057934b434afc46d822c2d2425d|https://g
 git|urtypes|urtypes|7fb280eab3b3563dfc57d2733b0bf5cbc0a96a6a|https://github.com/selfcustody/urtypes.git|7fb280eab3b3563dfc57d2733b0bf5cbc0a96a6a|src
 DEPS
 
-# Everything that must be at the top level of the finished zip, and nothing
-# else. Checked before the zip is written, so a dependency that silently failed
-# to unpack stops the build instead of shipping a wallet that cannot import.
 EXPECTED_TOP_LEVEL=(
     LICENSE.md
     OpenSSL
@@ -210,6 +251,70 @@ EXPECTED_TOP_LEVEL=(
     typing_extensions.py
     urtypes
 )
+
+# The simulated smartcards, shadowing pyscard's `smartcard` module. Nothing in
+# stock imports it, so only this firmware stages it. Rows are
+# source:name-in-the-zip:what the licences manifest should call it.
+STAGE_PACKAGES=(
+    "${REPO_ROOT}/src/smartcard:smartcard:fake card, not pyscard"
+)
+
+;;
+stock)
+
+# Stock's whole requirements.txt is five lines, and two of them do not belong in
+# a zip:
+#
+#   Pillow
+#       A compiled extension. Pyodide ships its own and the worker asks for it
+#       with loadPackage() at boot (see src/web/wallet-worker.js); a pure-Python
+#       stand-in here would shadow the real one.
+#   pyzbar
+#       Binds libzbar, which has no WebAssembly build. Stock's decode_qr.py
+#       imports it at module scope with no try/except, so the import has to
+#       succeed: src/fakes/pyzbar is staged below and browser_camera.py replaces
+#       the one function that would have called it. The smartcard fork guards
+#       the same import and therefore needs no such file.
+#
+# The other three are pinned here. embit and qrcode are the same artifacts, at
+# the same versions and the same sha256, that the smartcard table pins, because
+# both firmwares pin the same two versions.
+#
+# urtypes is the one place the two firmwares genuinely disagree. The fork pins a
+# selfcustody git commit; stock pins PyPI 1.0.1. Their trees differ by a single
+# line, `from .crypto import *` in __init__.py, which PyPI 1.0.1 has and the
+# pinned commit does not. Reusing the fork's pin would have built and probably
+# run, and it would also have meant this zip was not the thing stock's
+# requirements.txt names. Each firmware gets the pin its own upstream published.
+
+read -r -d '' DEPENDENCIES <<'DEPS' || true
+pypi|embit|embit|0.8.0|https://files.pythonhosted.org/packages/83/88/b054b00ade6d2a41749e15976cdcec4b7ec4656ac1cb917ce3de395528d1/embit-0.8.0.tar.gz|8bf4b10073c67400370ce523fb16f035fe759f6fdd987c579bdcc268d75ed770|embit-0.8.0/src
+pypi|qrcode|qrcode|7.3.1|https://files.pythonhosted.org/packages/94/9f/31f33cdf3cf8f98e64c42582fb82f39ca718264df61957f28b0bbb09b134/qrcode-7.3.1.tar.gz|375a6ff240ca9bd41adc070428b5dfc1dcfbb0f2507f1ac848f6cded38956578|qrcode-7.3.1
+pypi|urtypes|urtypes|1.0.1|https://files.pythonhosted.org/packages/60/43/f4acb0faf63bb92070760a3039a8cae1a88c46947c71e77e99a03e196ea5/urtypes-1.0.1.tar.gz|4f1cd0ef34c21ae6f408520ecd9de0d2d157ee885b94ad9e6481cfbb3838558e|urtypes-1.0.1/src
+DEPS
+
+EXPECTED_TOP_LEVEL=(
+    LICENSE.md
+    RPi
+    embit
+    licenses
+    main.py
+    pyzbar
+    qrcode
+    seedsigner
+    urtypes
+)
+
+# Two import-time stand-ins, and no `smartcard`: stock has no card code to
+# import it. See src/fakes/README.md for what they are and are not. Rows are
+# source:name-in-the-zip:what the licences manifest should call it.
+STAGE_PACKAGES=(
+    "${REPO_ROOT}/src/fakes/RPi:RPi:import stand-in, not RPi.GPIO"
+    "${REPO_ROOT}/src/fakes/pyzbar:pyzbar:import stand-in, not pyzbar"
+)
+
+;;
+esac
 
 # ---------------------------------------------------------------------------
 # Scratch space
@@ -356,17 +461,34 @@ find_license() {
 UPSTREAM_FILE="${REPO_ROOT}/UPSTREAM"
 [ -f "${UPSTREAM_FILE}" ] || die "missing ${UPSTREAM_FILE}"
 
-UPSTREAM_REPO="$(awk -F= '/^[[:space:]]*repo[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' "${UPSTREAM_FILE}")"
-UPSTREAM_COMMIT="$(awk -F= '/^[[:space:]]*commit[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' "${UPSTREAM_FILE}")"
+# upstream_field KEY
+#
+# One key out of the [FIRMWARE] section of UPSTREAM. Section-aware, because that
+# file now describes two firmwares and a parser that ignored the headers would
+# cheerfully hand back the other one's commit. The same awk program appears in
+# .github/workflows/reproducible-build.yml and upstream-tests.yml, which read
+# the same file for the same reason.
+upstream_field() {
+    awk -F= -v want="[${FIRMWARE}]" -v key="$1" '
+        /^\[/   { inside = ($0 == want); next }
+        inside && $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+            gsub(/[[:space:]]/, "", $2); print $2
+        }
+    ' "${UPSTREAM_FILE}"
+}
 
-[ -n "${UPSTREAM_REPO}" ]   || die "no 'repo =' line in ${UPSTREAM_FILE}"
-[ -n "${UPSTREAM_COMMIT}" ] || die "no 'commit =' line in ${UPSTREAM_FILE}"
+UPSTREAM_REPO="$(upstream_field repo)"
+UPSTREAM_COMMIT="$(upstream_field commit)"
+
+[ -n "${UPSTREAM_REPO}" ]   || die "no 'repo =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+[ -n "${UPSTREAM_COMMIT}" ] || die "no 'commit =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
 
 case "${UPSTREAM_COMMIT}" in
     [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
     *) die "commit in ${UPSTREAM_FILE} is not a sha: ${UPSTREAM_COMMIT}" ;;
 esac
 
+step "firmware ${FIRMWARE}"
 step "upstream ${UPSTREAM_REPO} @ ${UPSTREAM_COMMIT}"
 UPSTREAM_SRC="${SOURCES}/upstream"
 git_checkout "${UPSTREAM_REPO}" "${UPSTREAM_COMMIT}" "${UPSTREAM_SRC}"
@@ -395,9 +517,9 @@ step "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
 # keeps it out of the staged tree by construction rather than by filtering.
 rm -rf -- "${UPSTREAM_SRC}/.git"
 
-# Verbatim. Nothing in this repository patches the wallet -- the four hardware
-# seams are replaced from outside, by src/shims (which the worker writes into
-# the filesystem after unpacking) and by src/smartcard below.
+# Verbatim. Nothing in this repository patches the wallet -- the hardware seams
+# are replaced from outside, by src/shims (which the worker writes into the
+# filesystem after unpacking) and by the stand-in packages staged below.
 cp -R -- "${UPSTREAM_SRC}/src/seedsigner" "${STAGING}/seedsigner"
 cp    -- "${UPSTREAM_SRC}/src/main.py"    "${STAGING}/main.py"
 
@@ -406,16 +528,33 @@ cp    -- "${UPSTREAM_SRC}/LICENSE.md"     "${STAGING}/LICENSE.md"
 cp    -- "${UPSTREAM_SRC}/LICENSE.md"     "${STAGING}/licenses/SeedSigner.LICENSE"
 
 # ---------------------------------------------------------------------------
-# 3. The fake smartcard package
+# 3. This repository's stand-in packages
 # ---------------------------------------------------------------------------
 #
-# This shadows pyscard's `smartcard` module. It is a top-level entry in the zip
-# for exactly that reason: /wallet is first on sys.path, so `import smartcard`
-# in unmodified SeedSigner code finds this one.
+# Each one shadows a module the wallet imports and this environment cannot
+# provide. They are top-level entries in the zip for exactly that reason:
+# /wallet is first on sys.path, so the import in unmodified SeedSigner code
+# finds ours. Which ones are staged is the firmware's business, and the list was
+# chosen above:
+#
+#   smartcard  the simulated SeedKeeper and Satochip, shadowing pyscard. Only
+#              the fork has card code to import it.
+#   RPi        an import stand-in for RPi.GPIO. Only stock imports it unguarded.
+#   pyzbar     an import stand-in for the zbar binding, for the same reason.
+#
+# Nothing the other firmware never imports is shipped to it. A zip whose claim
+# is "the pin, its pinned dependencies and this repository's stand-ins, and
+# nothing else" should not carry a package that is dead on arrival.
 
-SMARTCARD_SRC="${REPO_ROOT}/src/smartcard"
-[ -f "${SMARTCARD_SRC}/__init__.py" ] || die "missing ${SMARTCARD_SRC}/__init__.py"
-cp -R -- "${SMARTCARD_SRC}" "${STAGING}/smartcard"
+MANIFEST_STAGED=""
+
+for entry in "${STAGE_PACKAGES[@]}"; do
+    IFS=':' read -r source name description <<< "${entry}"
+    [ -f "${source}/__init__.py" ] || die "missing ${source}/__init__.py"
+    cp -R -- "${source}" "${STAGING}/${name}"
+    MANIFEST_STAGED="${MANIFEST_STAGED}$(printf '%-22s %-26s %s' "${name}" "this repository" "${description}")
+"
+done
 
 # ---------------------------------------------------------------------------
 # 4. Dependencies
@@ -429,7 +568,7 @@ MANIFEST="${WORK_DIR}/licenses-manifest.txt"
     echo
     printf '%-22s %-26s %s\n' "MODULE" "DISTRIBUTION" "RELEASE"
     printf '%-22s %-26s %s\n' "seedsigner, main.py" "SeedSigner" "commit ${UPSTREAM_COMMIT}"
-    printf '%-22s %-26s %s\n' "smartcard" "this repository" "fake card, not pyscard"
+    printf '%s' "${MANIFEST_STAGED}"
 } > "${MANIFEST}"
 
 while IFS='|' read -r kind module dist release url integrity subpath; do
@@ -504,7 +643,11 @@ if [ "${actual_top_level}" != "${expected_top_level}" ]; then
 fi
 
 [ -f "${STAGING}/seedsigner/controller.py" ] || die "staged seedsigner package looks wrong: no controller.py"
-[ -f "${STAGING}/smartcard/__init__.py" ]    || die "staged smartcard package looks wrong: no __init__.py"
+
+for entry in "${STAGE_PACKAGES[@]}"; do
+    IFS=':' read -r _ name _ <<< "${entry}"
+    [ -f "${STAGING}/${name}/__init__.py" ] || die "staged ${name} package looks wrong: no __init__.py"
+done
 
 # ---------------------------------------------------------------------------
 # 7. Write the zip
@@ -515,9 +658,11 @@ fi
 # from readdir, mtimes from the filesystem, permissions from the umask, and a
 # "created by" byte from the platform. Every one of those is pinned below.
 
+# Named after the firmware, so both can sit in one directory and be served side
+# by side, and so a downloaded file says which pin it is meant to match.
 mkdir -p "${OUT_DIR}"
-OUT_ZIP="${OUT_DIR}/wallet.zip"
-OUT_MANIFEST="${OUT_DIR}/wallet.zip.manifest"
+OUT_ZIP="${OUT_DIR}/wallet-${FIRMWARE}.zip"
+OUT_MANIFEST="${OUT_DIR}/wallet-${FIRMWARE}.zip.manifest"
 
 step "writing ${OUT_ZIP}"
 python3 - "${STAGING}" "${OUT_ZIP}" "${OUT_MANIFEST}" "${SOURCE_DATE_EPOCH}" <<'PY'
@@ -586,9 +731,9 @@ print(f"    contents  sha256 {hashlib.sha256(manifest_text.encode('utf-8')).hexd
 PY
 
 if [ "${KEEP_STAGING}" = "yes" ]; then
-    rm -rf -- "${OUT_DIR}/staging"
-    cp -R -- "${STAGING}" "${OUT_DIR}/staging"
-    step "staged tree kept at ${OUT_DIR}/staging"
+    rm -rf -- "${OUT_DIR}/staging-${FIRMWARE}"
+    cp -R -- "${STAGING}" "${OUT_DIR}/staging-${FIRMWARE}"
+    step "staged tree kept at ${OUT_DIR}/staging-${FIRMWARE}"
 fi
 
 step "done"
@@ -596,6 +741,7 @@ echo
 echo "  ${OUT_ZIP}"
 echo "  ${OUT_MANIFEST}"
 echo
-echo "Compare the zip sha256 above with the wallet.zip you were served."
+echo "Compare the zip sha256 above with the wallet-${FIRMWARE}.zip you were served,"
+echo "and with the [${FIRMWARE}] section of UPSTREAM."
 echo "If those differ but the contents sha256 matches, the two builds hold the"
 echo "same files and you are looking at a zlib difference, not a code difference."

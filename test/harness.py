@@ -32,12 +32,20 @@ BASE_URL = os.environ.get("SIM_URL", f"http://127.0.0.1:{PORT}").rstrip("/")
 # an input to anything else, so it can be deleted at any time.
 ARTIFACT_DIR = os.environ.get("SIM_ARTIFACT_DIR", os.path.join(REPO, "test", "artifacts"))
 
-# The two build outputs, neither of which is committed. build/build-wallet-zip.sh
-# assembles wallet.zip from a pinned upstream SeedSigner commit and leaves it in
-# build/out; build/fetch-assets.sh downloads the Pyodide runtime into
-# src/web/pyodide. Both are looked for in a list rather than at one path, so a
-# deploy that puts everything in one directory still works. SIM_ASSETS replaces
-# the list, which is how the suite is pointed at an already-built tree.
+# Which firmware these tests drive. Two wallet zips are built and the page picks
+# one by name with ?firmware=; "smartcard" is the 3rdIteration fork the
+# simulator has always run, "stock" is SeedSigner as its own project publishes
+# it. Set SIM_FIRMWARE to switch a single test file over; run.py sets it for the
+# stock half of the suite.
+FIRMWARE = os.environ.get("SIM_FIRMWARE", "smartcard")
+
+# The build outputs, none of which is committed. build/build-wallet-zip.sh
+# assembles a wallet zip per firmware from its pinned upstream SeedSigner commit
+# and leaves it in build/out; build/fetch-assets.sh downloads the Pyodide
+# runtime into src/web/pyodide. Both are looked for in a list rather than at one
+# path, so a deploy that puts everything in one directory still works.
+# SIM_ASSETS replaces the list, which is how the suite is pointed at an
+# already-built tree.
 ASSET_DIRS = [d for d in os.environ.get("SIM_ASSETS", "").split(os.pathsep) if d] or [
     os.path.join(REPO, "build", "out"),
     os.path.join(REPO, "src", "web"),
@@ -59,8 +67,9 @@ def find_asset(name):
 
 
 def wallet_url(page="wallet.html", **params):
-    """A URL for the simulator with tracing turned on."""
+    """A URL for the simulator, with tracing on and the firmware named."""
     params.setdefault("debug", "1")
+    params.setdefault("firmware", FIRMWARE)
     return f"{BASE_URL}/{page}?{urlencode(params)}"
 
 
@@ -68,6 +77,17 @@ def artifact(name):
     """Absolute path to a generated file, with the directory made on demand."""
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
     return os.path.join(ARTIFACT_DIR, name)
+
+
+def firmware_artifact(name):
+    """artifact(), with the firmware in the name so two runs of the same test
+    against two firmwares do not overwrite each other's evidence.
+
+    The smartcard run keeps the bare names it has always written, because the
+    baseline image and everything referring to these files by name predates the
+    second firmware and there is no reason to churn it.
+    """
+    return artifact(name if FIRMWARE == "smartcard" else f"{FIRMWARE}-{name}")
 
 
 def save_screen(page, path):

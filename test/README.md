@@ -25,14 +25,21 @@ Then, from a fresh clone:
 
 That builds what is missing, generates the QR videos, starts a server, runs
 everything against it, and stops the server afterwards. The first run also
-downloads the Pyodide runtime and builds `wallet.zip` from the pinned upstream
-commit, which takes a few minutes; later runs reuse both.
+downloads the Pyodide runtime and builds both wallet zips from their pinned
+upstream commits, which takes a few minutes; later runs reuse all of it.
 
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
-`tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`, `cards_browser`,
+`tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`,
+`stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`, `cards_browser`,
 `cards_seed`, `cards_seedkeeper`:
 
     python3 test/run.py scan          # everything with "scan" in the name
+    python3 test/run.py stock         # the three stock-firmware scans
+
+The three scan tests run once per firmware: the smartcard fork the simulator has
+always run, and stock SeedSigner. The card tests are smartcard only, because the
+menus they drive do not exist in stock. `SIM_FIRMWARE` picks the firmware for a
+single test file run by hand.
     python3 test/run.py leak          # just the leak scanner
     python3 test/run.py cards tray    # the smartcard side only
 

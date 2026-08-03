@@ -45,7 +45,8 @@ only by tests we wrote ourselves about somebody else's code.
 git clone https://github.com/bitsagarob/seedsigner-sim.git
 cd seedsigner-sim
 ./build/fetch-assets.sh              # Pyodide, pinned and hash-checked (~26 MB, once)
-./build/build-wallet-zip.sh          # builds wallet.zip from the pinned commit
+./build/build-wallet-zip.sh smartcard   # wallet-smartcard.zip, from the pinned commit
+./build/build-wallet-zip.sh stock       # wallet-stock.zip, from the pinned commit
 python3 test/serve.py --port 8770 src/web src/shims build/out
 ```
 

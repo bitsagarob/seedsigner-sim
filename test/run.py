@@ -34,6 +34,11 @@ import harness
 PY = sys.executable
 
 # (name, argv relative to test/, does it need the server)
+#
+# The three scan tests run twice, once per firmware. Everything else is
+# smartcard only, and deliberately: the card tests drive SeedKeeper and Satochip
+# menus that stock does not have, so running them against stock would not be a
+# stricter check, it would be a check of a menu tree that is not there.
 SUITE = [
     ("leak_scan", ["leak_scan.py"], False),
     ("cards", ["test_cards.py"], False),
@@ -41,46 +46,55 @@ SUITE = [
     ("scan_seedqr", ["test_scan.py"], True),
     ("scan_compact", ["test_scan.py"], True),
     ("scan_native", ["test_scan_native.py"], True),
+    ("stock_scan_seedqr", ["test_scan.py"], True),
+    ("stock_scan_compact", ["test_scan.py"], True),
+    ("stock_scan_native", ["test_scan_native.py"], True),
     ("cards_browser", ["test_cards_browser.py"], True),
     ("cards_seed", ["test_cards_seed.py"], True),
     ("cards_seedkeeper", ["test_cards_seedkeeper.py"], True),
 ]
 
-# The same file scanned twice, once per QR encoding. Both must reach the same
-# seed, and the compact one is the encoding that breaks first if any layer
-# decides a payload is text.
+# The same file scanned twice per firmware, once per QR encoding. Both must
+# reach the same seed, and the compact one is the encoding that breaks first if
+# any layer decides a payload is text.
+STOCK = {"SIM_FIRMWARE": "stock"}
 EXTRA_ENV = {
     "scan_seedqr": {"QR_KIND": "qr"},
     "scan_compact": {"QR_KIND": "qr-compact"},
+    "stock_scan_seedqr": {"QR_KIND": "qr", **STOCK},
+    "stock_scan_compact": {"QR_KIND": "qr-compact", **STOCK},
+    "stock_scan_native": dict(STOCK),
 }
 
 
 def ensure_assets() -> bool:
-    """wallet.zip and the Pyodide runtime, built on demand."""
+    """Both wallet zips and the Pyodide runtime, built on demand."""
     wanted = [
-        ("wallet.zip", "build/build-wallet-zip.sh"),
-        (os.path.join("pyodide", "pyodide.js"), "build/fetch-assets.sh"),
+        ("wallet-smartcard.zip", ["build/build-wallet-zip.sh", "smartcard"]),
+        ("wallet-stock.zip", ["build/build-wallet-zip.sh", "stock"]),
+        (os.path.join("pyodide", "pyodide.js"), ["build/fetch-assets.sh"]),
     ]
-    for name, script in wanted:
+    for name, argv in wanted:
         if harness.find_asset(name):
             continue
+        script = argv[0]
         path = os.path.join(harness.REPO, script)
         if not os.path.exists(path):
             print(f"missing {name}, and {script} is not there to build it", file=sys.stderr)
             return False
-        print(f"--- {script} (for {name})", flush=True)
+        print(f"--- {' '.join(argv)} (for {name})", flush=True)
         try:
-            code = subprocess.call([path], cwd=harness.REPO)
+            code = subprocess.call([path] + argv[1:], cwd=harness.REPO)
         except OSError as exc:
             # Almost always a lost executable bit or a noexec filesystem, which
             # is worth saying rather than showing a traceback about.
             print(f"cannot run {script}: {exc}", file=sys.stderr)
             return False
         if code != 0:
-            print(f"{script} failed", file=sys.stderr)
+            print(f"{' '.join(argv)} failed", file=sys.stderr)
             return False
         if not harness.find_asset(name):
-            print(f"{script} ran but produced no {name}", file=sys.stderr)
+            print(f"{' '.join(argv)} ran but produced no {name}", file=sys.stderr)
             return False
     return True
 
@@ -119,17 +133,32 @@ def start_server():
 # while the device area was byte-identical both times. A check that fails for
 # reasons nobody caused is one people learn to skim past, and that is how a real
 # regression eventually gets waved through.
-BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "baseline", "screen-b2269592.png")
+#
+# One baseline per firmware, which is forced rather than chosen: the two
+# firmwares draw SeedFinalizeScreen differently. Stock offers one passphrase
+# button where the fork offers three, so the two screens are not the same image
+# and never will be, and a single baseline could only be satisfied by one of
+# them. The seed behind both is the same seed, and the fingerprint printed on
+# both is b2269592.
+BASELINE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "baseline")
+BASELINES = {
+    "smartcard": os.path.join(BASELINE_DIR, "screen-b2269592.png"),
+    "stock": os.path.join(BASELINE_DIR, "stock-screen-b2269592.png"),
+}
 
 SAME_SEED_SCREENS = ("scan-screen-qr.png", "scan-screen-qr-compact.png",
                      "scan-screen-native-compact.png")
 
 
-def same_seed() -> int:
-    print("\n=== same_seed " + "=" * 54, flush=True)
-    paths = [os.path.join(harness.ARTIFACT_DIR, n) for n in SAME_SEED_SCREENS]
-    missing = [n for n, p in zip(SAME_SEED_SCREENS, paths) if not os.path.exists(p)]
+def same_seed(firmware="smartcard") -> int:
+    label = "same_seed" if firmware == "smartcard" else f"{firmware}_same_seed"
+    print(f"\n=== {label} " + "=" * (63 - len(label)), flush=True)
+    prefix = "" if firmware == "smartcard" else f"{firmware}-"
+    names = tuple(prefix + n for n in SAME_SEED_SCREENS)
+    BASELINE = BASELINES[firmware]
+
+    paths = [os.path.join(harness.ARTIFACT_DIR, n) for n in names]
+    missing = [n for n, p in zip(names, paths) if not os.path.exists(p)]
     if missing:
         print(f"  FAIL no captured screen from {missing}")
         return 1
@@ -212,11 +241,12 @@ def main(argv) -> int:
                 if os.path.exists(path):
                     os.remove(path)
 
-    # Only meaningful when every scan test ran and passed: comparing a fresh
-    # capture against a stale one would prove nothing.
-    scans = ("scan_seedqr", "scan_compact", "scan_native")
-    if all(results.get(name) == 0 for name in scans):
-        results["same_seed"] = same_seed()
+    # Only meaningful when every scan test for that firmware ran and passed:
+    # comparing a fresh capture against a stale one would prove nothing.
+    for firmware, prefix in (("smartcard", ""), ("stock", "stock_")):
+        scans = [prefix + n for n in ("scan_seedqr", "scan_compact", "scan_native")]
+        if all(results.get(name) == 0 for name in scans):
+            results[f"{prefix}same_seed"] = same_seed(firmware)
 
     print("\n" + "=" * 68)
     for name, code in results.items():

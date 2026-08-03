@@ -1,23 +1,48 @@
-# The wallet this simulator runs, pinned.
+# The two firmwares this simulator runs, pinned.
 #
-# src/seedsigner in the built wallet.zip is this tree verbatim. Nothing in this
-# repository patches it: the four hardware seams are replaced from the outside,
-# by the modules in src/shims. That is the property the build script exists to
-# let you check for yourself.
+# src/seedsigner in a built wallet zip is one of the trees below, verbatim.
+# Nothing in this repository patches either of them: the hardware seams are
+# replaced from the outside, by the modules in src/shims and by the stand-in
+# packages in src/smartcard and src/fakes. That is the property the build script
+# exists to let you check for yourself.
 #
-# A release tag rather than a branch tip. A tip moves: rebase or force-push dev
-# and the sha below stops existing on the remote, at which point every rebuild
-# described here fails at the fetch, for everyone, permanently. A tag is a name
-# upstream has published and does not move. This one is also what the official
-# pi0-smartcard device image is built from, so the simulator and the physical
-# device run the same code. The sha is still the pin; the tag only says which
-# release it is.
+# Two named sections, one per firmware. Every consumer of this file names the
+# section it wants: build/build-wallet-zip.sh, which assembles the zip, and the
+# two workflows that re-derive its hash and run upstream's own tests against our
+# pins. Nothing reads a key outside a section, so the parsers cannot silently
+# pick up the wrong firmware's pin if a section is renamed or removed.
+#
+# Both pins are release tags rather than branch tips. A tip moves: rebase or
+# force-push dev and the sha stops existing on the remote, at which point every
+# rebuild described here fails at the fetch, for everyone, permanently. A tag is
+# a name upstream has published and does not move. The sha is still the pin; the
+# tag only says which release it is.
+#
+# Each section also publishes the two hashes of the wallet zip that
+# build/build-wallet-zip.sh produces from that pin. Rebuild it yourself and
+# compare; if these differ, something between that commit and the file you were
+# served is not what it claims to be.
+
+# SeedSigner as the SeedSigner project publishes it: the firmware on a plain
+# device. No smartcard support, no card menus, and a much smaller dependency set
+# because of it.
+[stock]
+repo   = https://github.com/SeedSigner/seedsigner.git
+commit = e0a80d4b33b8eb7fb1e9fd14a27b7cd11c7d2cd6
+tag    = 0.8.7
+
+wallet_zip_sha256          = 2db897dea90a0ecc090e959cbea34c6b4afbaa860478a260cc51f8cfdfd0a253
+wallet_zip_contents_sha256 = dbea45131cc89e391b8ced909975b7d0030771d1d284142dd8287668130f2974
+
+# The 3rdIteration fork, which merges the release above and adds smartcard
+# support: SeedKeeper and Satochip cards, the card menus, and the dependency
+# stack those need. This tag is also what the official pi0-smartcard device
+# image is built from, so the simulator and that physical device run the same
+# code.
+[smartcard]
 repo   = https://github.com/3rdIteration/seedsigner.git
 commit = 662d9dba2327eb77d6924ae9bd62d4902bf24634
 tag    = SeSi-0.8.7+ShSi-B11
 
-# The wallet.zip that build/build-wallet-zip.sh produces from the pin above.
-# Rebuild it yourself and compare; if these differ, something between that commit
-# and the file you were served is not what it claims to be.
-wallet_zip_sha256      = d872779967ed1e2b400de469590dd7bf3a459db66c071d26211e87f866db3199
+wallet_zip_sha256          = d872779967ed1e2b400de469590dd7bf3a459db66c071d26211e87f866db3199
 wallet_zip_contents_sha256 = d2e658a2a422c8d2a318ec0f1159d1a29750b1862b27fd2cf59c336bf9376180

@@ -22,7 +22,7 @@ bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.j
 # Runtime-fetched sources. wallet.zip is not the whole story: these are
 # fetched separately by the page and include the shim that returns the decoded
 # QR payload, so verifying the zip alone leaves them unchecked.
-084eee06eddd50033eb96a62c753dda3a1c541add9dd0e4e15266fcef6f4abe0  src/shims/browser_camera.py
+175204d90723138f936e280500e8498ecb4cb17e17e4661e0a3e3af3823c8ec5  src/shims/browser_camera.py
 09f9ae5c73128719261d757ff5184e79912158ceb21dc650e11243da093644f3  src/shims/browser_display.py
 2e1b0500e002f33684e9187a9c3d2752f526ce6e78f0e02feea238e92c0dee5b  src/shims/browser_qr.py
 bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.js
@@ -30,7 +30,7 @@ bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.j
 c2165a719265ede7e6fd6195d6950f1c6c99bc01aef78431c6d4b0c1f8a825a3  src/web/sw.js
 e7279e0f91233abdf83725250c3f3b242180f57781157862974eb7dc2eb1bb93  src/web/wallet-camera.js
 31353308f7ae62967fa4ac63da72de8fca1553e2fd3c815281f7d47487abf15c  src/web/wallet-cards.js
-981f96990c7fda8477d741b198a40128d50ba591da3a812d8d19b850132e75bd  src/web/wallet-worker.js
+8fad2dc915450932ad3622cc0dfb75a8950a1578662e5e372c205a1937768700  src/web/wallet-worker.js
 6723058c1f732399bc7253a7303ad8bafb31fad1cad9c5250f24e334832574a2  src/web/index.html
-eb59cf3d3f07b8301149146d25868ee1d9561099e3eb39dfa10b4b2c3120303f  src/web/wallet.html
+0ec71815ffbbea5f1cf4e52a0eacc8d747eea84e606da2ec70cc55f48a365709  src/web/wallet.html
 2e84bdc9ea48e5be912aaf9adf59868102ec4851be790bfe7c6cba006b419ac4  src/web/manifest.json

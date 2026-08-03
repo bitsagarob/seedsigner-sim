@@ -13,6 +13,10 @@ let camera = null;    // the page's half of the camera channel, see wallet-camer
 let cards = null;     // the page's card tray, see wallet-cards.js
 let debug = false;    // ?debug=1 on the page; otherwise js_log says nothing
 
+// Which of the two built wallet zips to unpack. The page decides; see
+// FIRMWARES in wallet.html for what the names mean and how one is chosen.
+let firmware = "smartcard";
+
 const STATE = 0;
 const KEYCODE = 1;
 
@@ -30,6 +34,7 @@ self.onmessage = async (event) => {
     // with, which is how this worked before the tray existed.
     cards = event.data.cardBuffer ? CardTray.forWorker(event.data.cardBuffer) : null;
     debug = !!event.data.debug;
+    if (event.data.firmware) firmware = event.data.firmware;
     try {
       await boot(event.data.width, event.data.height);
     } catch (error) {
@@ -48,7 +53,9 @@ async function boot(width, height) {
   await pyodide.loadPackage(["Pillow", "pycryptodome", "cryptography"]);
 
   post("status", { message: "unpacking wallet…" });
-  const zip = await (await fetch("wallet.zip")).arrayBuffer();
+  // One zip per firmware, each built by build/build-wallet-zip.sh from its own
+  // section of UPSTREAM and published with its own pair of hashes.
+  const zip = await (await fetch(`wallet-${firmware}.zip`)).arrayBuffer();
   await pyodide.unpackArchive(zip, "zip", { extractDir: "/wallet" });
 
   const driver = await (await fetch("browser_display.py")).text();
@@ -226,12 +233,24 @@ if not hasattr(hashlib, "pbkdf2_hmac"):
 # do not catch, so exporting a QR ended in a System Error instead of a QR.
 # Reporting the binary as absent is both true here and the case they already
 # know how to handle.
+#
+# call() reports failure by returning non-zero rather than by raising, because
+# the two firmwares disagree about which one they can survive. The fork's qr.py
+# wraps the qrencode call in try/except FileNotFoundError and also checks the
+# return code; stock's has no try/except at all and only checks the code, so a
+# raise there escapes and every screen that draws a QR ends in a visible System
+# Error. A non-zero return satisfies both, and "the binary ran and failed" is no
+# less true here than "the binary is not installed".
 import subprocess
 
 def _no_such_binary(*args, **kwargs):
     raise FileNotFoundError("no processes in the browser")
 
-for _name in ("call", "run", "check_call", "check_output", "Popen"):
+def _failed_call(*args, **kwargs):
+    return 1
+
+subprocess.call = _failed_call
+for _name in ("run", "check_call", "check_output", "Popen"):
     setattr(subprocess, _name, _no_such_binary)
 
 # --- draw to the page instead of a panel -------------------------------------
@@ -344,7 +363,14 @@ browser_qr.install(_poll_button)
 # The pyscard stand-in ships with the wallet, so unlike the camera there is
 # nothing to install here beyond handing it the tray. Left alone it keeps a card
 # of its own, and the reader is never empty.
-if js_cards is not None:
+#
+# Smartcard firmware only. Stock SeedSigner has no card code, so its wallet zip
+# carries no smartcard package to import: a zip whose claim is "the pin, its
+# pinned dependencies and this repository's stand-ins, and nothing else" should
+# not be padded with a package that firmware can never reach. The flag says which
+# firmware this is rather than catching ImportError, because a missing module
+# here would then be indistinguishable from a broken build.
+if js_cards is not None and ${firmware === "smartcard" ? "True" : "False"}:
     from smartcard import simulated_card
     simulated_card.install(js_cards, js_log)
 
@@ -386,18 +412,25 @@ def _traced_view_run(self, *a, **kw):
         raise
 View.run = _traced_view_run
 
-# The controller consults these right after the splash.
-from seedsigner.helpers import seedsigner_os as _ss_os
-_orig_devbuild = _ss_os.is_seedsigner_os_dev_build
-def _traced_devbuild():
-    js_log("is_seedsigner_os_dev_build() called")
-    result = _orig_devbuild()
-    js_log(f"is_seedsigner_os_dev_build() -> {result}")
-    return result
-_ss_os.is_seedsigner_os_dev_build = _traced_devbuild
+# The controller consults these right after the splash. Only the fork has the
+# helper: stock has no seedsigner.helpers.seedsigner_os at all, so this is
+# tracing that simply has nothing to trace there.
+try:
+    from seedsigner.helpers import seedsigner_os as _ss_os
+except ImportError:
+    _ss_os = None
 
-import seedsigner.controller as _ctrl
-_ctrl.is_seedsigner_os_dev_build = _traced_devbuild
+if _ss_os is not None:
+    _orig_devbuild = _ss_os.is_seedsigner_os_dev_build
+    def _traced_devbuild():
+        js_log("is_seedsigner_os_dev_build() called")
+        result = _orig_devbuild()
+        js_log(f"is_seedsigner_os_dev_build() -> {result}")
+        return result
+    _ss_os.is_seedsigner_os_dev_build = _traced_devbuild
+
+    import seedsigner.controller as _ctrl
+    _ctrl.is_seedsigner_os_dev_build = _traced_devbuild
 
 import time as _time
 _orig_sleep = _time.sleep

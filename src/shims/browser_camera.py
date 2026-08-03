@@ -209,10 +209,23 @@ def _install_preview_pump():
         camera = self.camera
         original_read = camera.read_video_stream
 
+        # The guard is what makes this safe on both firmwares. The fork's
+        # LivePreviewThread asks for its frame with preview=True, so the flag
+        # alone is enough to tell "the decode loop wants a frame" from "the
+        # preview does". Stock's read_video_stream is (self, as_image=False)
+        # with no preview keyword at all, so on stock the preview's own read
+        # looks exactly like the decode loop's and would pump the preview from
+        # inside the preview, for as deep as the recursion limit allows.
+        drawing = {"active": False}
+
         def read_and_draw(*args, **kwargs):
             frame = original_read(*args, **kwargs)
-            if frame is not None and not kwargs.get("preview"):
-                _pump_preview(self)
+            if frame is not None and not kwargs.get("preview") and not drawing["active"]:
+                drawing["active"] = True
+                try:
+                    _pump_preview(self)
+                finally:
+                    drawing["active"] = False
             return frame
 
         camera.read_video_stream = read_and_draw

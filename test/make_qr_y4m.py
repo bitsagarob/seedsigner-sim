@@ -13,10 +13,18 @@ than shelling out to ffmpeg. That keeps the test to one dependency and keeps it
 deterministic: the same seed comes out every run, which is what makes a
 screenshot worth anything as proof.
 
-The one dependency is the wallet's own vendored qrcode, taken out of the built
-wallet.zip, so the QR under test is drawn by the same library SeedSigner uses to
+The one dependency is the wallet's own vendored qrcode, taken out of a built
+wallet zip, so the QR under test is drawn by the same library SeedSigner uses to
 draw one. mnemonic comes from there too, for the same reason. Nothing is
 installed from the network for this.
+
+The smartcard zip is the one opened, and the videos it produces are used for
+both firmwares. Two reasons, and neither is laziness. Both firmwares pin qrcode
+7.3.1, the same artifact at the same sha256, so the QR drawn is the same QR
+either way. And the stock zip carries no mnemonic at all: stock has its own
+wordlist handling and does not depend on the library, so there would be nothing
+there to compute the CompactSeedQR bit packing with. A video is a picture held
+up to a camera; it is an input to the wallet, not part of it.
 
 The seed is the standard BIP39 test vector "army van defense ...". Nothing about
 it is secret and nothing should ever hold value.
@@ -59,7 +67,8 @@ def vendored_libraries(wallet_zip: str) -> str:
     with zipfile.ZipFile(wallet_zip) as archive:
         members = [n for n in archive.namelist() if n.startswith(VENDORED)]
         if not members:
-            raise SystemExit(f"{wallet_zip} carries no qrcode/mnemonic; is it a wallet.zip?")
+            raise SystemExit(f"{wallet_zip} carries no qrcode/mnemonic; is it the smartcard "
+                         "wallet zip?")
         archive.extractall(target, members)
     sys.path.insert(0, target)
     return target
@@ -136,10 +145,10 @@ def main(argv) -> int:
     directory = argv[1] if len(argv) > 1 else harness.ARTIFACT_DIR
     os.makedirs(directory, exist_ok=True)
 
-    wallet_zip = os.environ.get("WALLET_ZIP") or harness.find_asset("wallet.zip")
+    wallet_zip = os.environ.get("WALLET_ZIP") or harness.find_asset("wallet-smartcard.zip")
     if not wallet_zip or not os.path.exists(wallet_zip):
-        print("no wallet.zip: run build/build-wallet-zip.sh first, or set WALLET_ZIP",
-              file=sys.stderr)
+        print("no wallet-smartcard.zip: run build/build-wallet-zip.sh smartcard first, "
+              "or set WALLET_ZIP", file=sys.stderr)
         return 2
 
     unpacked = vendored_libraries(wallet_zip)

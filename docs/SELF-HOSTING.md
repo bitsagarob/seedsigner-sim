@@ -42,8 +42,9 @@ blob and a wallet you are being asked to trust are both things better fetched an
 verified than committed.
 
 ```sh
-./build/fetch-assets.sh       # Pyodide 0.26.4 -> src/web/pyodide/, sha256-checked
-./build/build-wallet-zip.sh   # -> build/out/wallet.zip, built from the pinned commit
+./build/fetch-assets.sh                 # Pyodide 0.26.4 -> src/web/pyodide/, sha256-checked
+./build/build-wallet-zip.sh smartcard   # -> build/out/wallet-smartcard.zip, from the pinned commit
+./build/build-wallet-zip.sh stock       # -> build/out/wallet-stock.zip, from the pinned commit
 ```
 
 `fetch-assets.sh --check` re-verifies what is already on disk, and
@@ -83,7 +84,7 @@ directory:
 mkdir -p /srv/seedsigner-sim
 cp -r src/web/.  /srv/seedsigner-sim/     # page, scripts, icons, and pyodide/
 cp src/shims/browser_*.py /srv/seedsigner-sim/
-cp build/out/wallet.zip   /srv/seedsigner-sim/
+cp build/out/wallet-*.zip /srv/seedsigner-sim/
 ```
 
 What ends up there, and why each piece has to be exactly where it is (the page,
@@ -97,7 +98,7 @@ the worker and the shims all fetch each other by relative path):
 | `sw.js`, `manifest.json`, `icon-*.png`, `apple-touch-icon.png` | `src/web/` | offline cache and PWA install; optional, the wallet runs without them |
 | `pyodide/` | `fetch-assets.sh` | ~26 MB: the runtime plus the wheels for Pillow, pycryptodome and cryptography |
 | `browser_display.py`, `browser_camera.py`, `browser_qr.py` | `src/shims/` | fetched at boot and written into Pyodide's filesystem |
-| `wallet.zip` | `build/out/` | ~4 MB: the pinned `seedsigner` tree, its pure-Python dependencies, and the simulated `smartcard` package |
+| `wallet-smartcard.zip`, `wallet-stock.zip` | `build/out/` | one per firmware, each the pinned `seedsigner` tree plus its pure-Python dependencies plus this repository's stand-in packages. Serve both: the page picks one with `?firmware=` |
 
 The shims sit next to the page rather than inside `wallet.zip` deliberately: it
 keeps the zip exactly what the build script produced, with the seams visibly
@@ -196,9 +197,9 @@ The point of the pin is that nobody has to take "it is the real firmware" on tru
 Anyone can rebuild and compare:
 
 ```sh
-./build/build-wallet-zip.sh
-sha256sum build/out/wallet.zip
-curl -s https://sim.example.org/wallet.zip | sha256sum   # must be the same
+./build/build-wallet-zip.sh smartcard
+sha256sum build/out/wallet-smartcard.zip
+curl -s https://sim.example.org/wallet-smartcard.zip | sha256sum   # must be the same
 ```
 
 The build is reproducible (fixed timestamps, fixed entry order, nothing about the
