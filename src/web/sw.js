@@ -17,10 +17,16 @@
  * blocks inside SeedSigner's controller loop and SharedArrayBuffer is the only
  * channel that can reach it.
  */
-const VERSION = "sim-v4";
+const VERSION = "sim-v5";
 const CACHE = "seedsignersim-" + VERSION;
 
 // Small enough to fetch up front so a first-run offline load still works.
+//
+// The analytics pair is deliberately not here and never will be. /mt.js and
+// /mt.php live at the site root, outside this worker's scope, so nothing below
+// can reach them anyway -- which is the reason they were put there: a cached
+// tracker is a stale tracker, and a cached beacon is a visit that either never
+// happened or happened again days later.
 const SHELL = [
   "./",
   "./index.html",
@@ -28,6 +34,7 @@ const SHELL = [
   "./wallet-worker.js",
   "./wallet-camera.js",
   "./wallet-cards.js",
+  "./wallet-track.js",
   "./seedsigner-device.js",
   "./jsQR.js",
   "./browser_camera.py",

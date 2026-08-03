@@ -455,12 +455,19 @@
 <script src="ur-decode.js"></script>
 <script src="signet-coordinator.js"></script>
 <script src="wallet-tutorial.js"></script>
+<script src="wallet-track.js"></script>
 <script>
 // Offline cache. Registered late and failure-tolerant: the simulator must work
 // exactly the same if this is unavailable or blocked.
 if ("serviceWorker" in navigator) {
   addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
+
+// The one name the page below uses to count anything, and a set of no-ops when
+// wallet-track.js is not there -- a clone that did not copy it, a blocker that
+// refused it. Nothing that follows has to ask whether counting is possible, and
+// nothing that follows can fail because it is not.
+const track = window.Track || { event() {}, screen() {}, milestone() {} };
 
 // Tracing is off unless asked for. It narrates every screen, thread and key to
 // the console, which is what the tests read, but it is noise for anyone else.
@@ -534,6 +541,14 @@ for (const panel of document.querySelectorAll("header > details")) {
   document.addEventListener("keydown", (event) => {
     if (panel.open && event.key === "Escape") panel.open = false;
   });
+  // Opening only. A panel closes for reasons the visitor did not choose --
+  // clicking anywhere else, Escape, opening the other one -- and counting those
+  // would say a panel was used twice as often as it was.
+  panel.addEventListener("toggle", () => {
+    if (panel.open) {
+      track.event("page", panel.id === "about" ? "about-open" : "technical-details-open");
+    }
+  });
 }
 
 // Say which firmware this is, in words, in the details panel.
@@ -553,6 +568,7 @@ for (const name of FIRMWARES) {
   button.setAttribute("aria-pressed", String(name === FIRMWARE));
   button.addEventListener("click", () => {
     if (name === FIRMWARE) return;
+    track.event("page", "firmware-switch", name);
     const params = new URLSearchParams(location.search);
     params.set("firmware", name);
     location.search = params.toString();  // sets it and reloads
@@ -680,6 +696,20 @@ function sendKey(channel) {
   Atomics.notify(keyBuffer, 0);
 }
 
+// The same eight channels the other way round, for the name a press is counted
+// under. KEYMAP cannot be inverted into this: it has two spellings of select.
+const KEY_NAMES = [null, "up", "down", "left", "right", "select", "key1", "key2", "key3"];
+
+// A press somebody made, whether they clicked the key or typed it. Counted
+// after the wallet has already been woken, so the worker is never waiting on
+// anything here, and separate from sendKey because the tutorial drives the
+// device through that: a walkthrough pressing two hundred keys by itself would
+// bury the handful a visitor chose to press.
+function pressKey(channel) {
+  sendKey(channel);
+  track.event("device", "key", KEY_NAMES[channel] || String(channel));
+}
+
 // Rebuilt only when the worker reports a screen the current art was not sized
 // for, because rebuilding detaches the canvas the wallet is painting into.
 let deviceScreen = "";
@@ -688,7 +718,7 @@ function mountDevice(width, height) {
   if (deviceScreen === size) return;
   deviceScreen = size;
   const device = SeedSignerDevice.render(deviceEl, {
-    screenWidth: width, screenHeight: height, interactive: true, onKey: sendKey,
+    screenWidth: width, screenHeight: height, interactive: true, onKey: pressKey,
     maxWidth: "68rem",   // ~1.45x the native 320x240 in the cutout
     card: false,         // the tray below is what says whether a card is in
   });
@@ -720,6 +750,12 @@ mountDevice(W, H);
 // Escape, comes back out.
 const fullscreenButton = document.getElementById("fullscreen");
 function setSolo(on) {
+  // Only when it moves. Escape calls this on every press, solo or not, and a
+  // page that counted those would report the device being put away by people
+  // who were dismissing a panel.
+  if (document.body.classList.contains("solo") !== on) {
+    track.event("page", "fullscreen", on ? "on" : "off");
+  }
   document.body.classList.toggle("solo", on);
   fullscreenButton.setAttribute("aria-pressed", String(on));
   fullscreenButton.textContent = on ? "Back to the page" : "Fill the screen";
@@ -736,6 +772,57 @@ document.addEventListener("keydown", (event) => {
 // Set once the tutorial is mounted, and only then. Everything that talks to it
 // checks first, because on the resting page there is nothing there.
 let tutorial = null;
+
+// Reaching this screen at all is the milestone: SeedFinalizeView puts it up
+// holding the fingerprint of a seed that is, by then, in the wallet's memory.
+const MILESTONES = {
+  SeedFinalizeScreen: "seed-loaded",
+};
+
+// Three different endings share one screen. A signed transaction, an exported
+// xpub and a SeedQR are all a QRDisplayScreen, because that is literally the
+// screen the wallet shows a QR code with, and the class name is all the
+// narration carries. What separates them is where the device came from, so the
+// screen that only appears on the way to one of them arms the milestone and the
+// QR screen fires it. Declining at the finalize screen never reaches a QR, so
+// this counts a signature rather than the offer of one.
+const ARMED_BY = {
+  PSBTFinalizeScreen: "psbt-signed",
+  SeedExportXpubDetailsScreen: "xpub-exported",
+};
+let armed = null;
+
+// A card narrates only once it has done something a locked card refuses: taken
+// a seed, stored a secret, handed one back. That is as close as the page can
+// get to "the PIN was accepted" -- the card's own narration has no line for the
+// unlock itself, and it lives inside the pinned wallet zip, whose bytes are
+// published and must not be edited to suit this.
+const CARD_UNLOCKED = /^\[card\] .*(seeded with|stored secret|exporting secret)/;
+
+// Where a visitor got to, out of the wallet's own account of itself.
+//
+// Screens rather than views, because the views are not really narrated: the
+// worker traces View.run, and all 310 of upstream's views define their own run,
+// so the base class it patched is almost never the one that gets called. The
+// screen names are what the tests and the tutorial have always read, and they
+// are coarse -- most menus are a ButtonListScreen -- but they are the truth
+// about what was on the device, and the shape of a visit is legible in them.
+function narrate(message) {
+  const entered = /^display\(\) enter: (\w+)/.exec(message);
+  if (!entered) {
+    if (CARD_UNLOCKED.test(message)) track.milestone("card-unlocked");
+    return;
+  }
+  const screen = entered[1];
+  track.screen(screen);
+  if (MILESTONES[screen]) track.milestone(MILESTONES[screen]);
+  if (ARMED_BY[screen]) {
+    armed = ARMED_BY[screen];
+  } else if (screen === "QRDisplayScreen" && armed) {
+    track.milestone(armed);
+    armed = null;
+  }
+}
 
 if (!window.crossOriginIsolated) {
   statusEl.textContent = "this page needs cross-origin isolation, which the server is not sending";
@@ -758,11 +845,13 @@ if (!window.crossOriginIsolated) {
         statusEl.className = "ready";
       }
     } else if (type === "log") {
-      // The tutorial reads the same narration the tests do -- it is how it
-      // knows which screen the device reached -- so the worker is asked for it
-      // whenever the tutorial is running. Only ?debug=1 puts it on the console.
+      // The narration the tests read is also the tutorial's oracle and the only
+      // account this page has of where a visitor actually got to, so the worker
+      // is asked for it always. Only ?debug=1 puts it on the console, which is
+      // what it was ever gated for: it is noise to everyone else.
       if (tutorial) tutorial.log(event.data.message);
       if (DEBUG) console.log("[py] " + event.data.message);
+      narrate(event.data.message);
     } else if (type === "status") {
       statusEl.textContent = event.data.message;
     } else if (type === "ready") {
@@ -806,16 +895,21 @@ if (!window.crossOriginIsolated) {
     WalletTutorial.offer(slot);
   }
 
+  // debug is the worker's narration, not the console's: it decides whether the
+  // messages above are built and posted at all. Always on now, because the page
+  // itself reads them -- the tutorial's oracle and the screens the visit is
+  // counted by are both that stream, and neither can be behind a URL parameter
+  // nobody sets. ?debug=1 still decides what reaches the console.
   worker.postMessage({
     type: "init", sharedBuffer: shared, cameraBuffer, cardBuffer,
-    width: W, height: H, debug: DEBUG || TUTORIAL, firmware: FIRMWARE,
+    width: W, height: H, debug: true, firmware: FIRMWARE,
   });
 
   document.addEventListener("keydown", (event) => {
     const channel = KEYMAP[event.key];
     if (channel === undefined) return;
     event.preventDefault();
-    sendKey(channel);
+    pressKey(channel);
   });
 }
 </script>

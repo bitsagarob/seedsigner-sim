@@ -293,6 +293,13 @@
     }, 60);
   };
 
+  // Counted if wallet-track.js is on the page, ignored if it is not. The panel
+  // is the one thing here somebody is either driving or watching, so which of
+  // its buttons get pressed, and how far a run gets, is the whole question.
+  function track(action, name) {
+    if (scope.Track) scope.Track.event("tutorial", action, name);
+  }
+
   Tutorial.prototype.control = function (label, handler) {
     var button = element("button", null, label);
     button.type = "button";
@@ -500,7 +507,13 @@
   // ------------------------------------------------------------ the controls
 
   Tutorial.prototype.togglePlay = function () {
-    if (this.mode === "idle") return this.start("self");
+    if (this.mode === "idle") {
+      track("play", "start");
+      return this.start("self");
+    }
+    // Before the flip, so the name is what was asked for rather than what the
+    // button now says.
+    track("play", this.paused ? "resume" : "pause");
     this.paused = !this.paused;
     this.stepOnce = false;               // Play means keep going, not one more
     this.reflect();
@@ -516,6 +529,7 @@
    * takes effect.
    */
   Tutorial.prototype.stepOn = function () {
+    track("step", this.mode);
     this.stepOnce = true;
     if (this.mode === "idle") return this.start("self");
     this.paused = false;
@@ -533,8 +547,12 @@
    * so if it has already happened, the new attempt sees it immediately.
    */
   Tutorial.prototype.toggleHands = function () {
-    if (this.mode === "idle") return this.start("hands");
+    if (this.mode === "idle") {
+      track("drive", "hands");
+      return this.start("hands");
+    }
     var step = this.at, action = this.atAction;
+    track("drive", this.mode === "hands" ? "self" : "hands");
     this.mode = this.mode === "hands" ? "self" : "hands";
     this.paused = false;
     this.stepOnce = false;
@@ -544,6 +562,7 @@
   };
 
   Tutorial.prototype.restart = function () {
+    track("restart", "step " + (this.at + 1));
     location.reload();
   };
 
@@ -597,6 +616,10 @@
       }
       self.fraction = first / step.actions.length;
       self.setProgress(self.fraction);
+      // Reaching a step, not resuming one. Taking the buttons in the middle of
+      // a step re-enters it at the action in hand, and counting that would say
+      // the run got there twice.
+      if (!first) track("step-reached", step.title);
 
       // A step opens with a title and a paragraph saying what is about to
       // happen, which is the part worth reading whole, so it is read before the
@@ -639,6 +662,10 @@
       self.doText.textContent = "";
       self.endTransfer();
       self.setProgress(0);
+      // The last step returned, so the spend is confirmed and the whole
+      // ceremony is behind them. Only reachable here.
+      track("finished", "");
+      if (scope.Track) scope.Track.milestone("tutorial-finished");
     }).catch(function (error) {
       self.fail(error);
     });
@@ -1289,6 +1316,7 @@
       button.type = "button";
       button.id = "start-tutorial";
       button.addEventListener("click", function () {
+        track("open", "");
         var params = new URLSearchParams(location.search);
         params.set("tutorial", "1");
         location.search = params.toString();

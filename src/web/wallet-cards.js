@@ -201,6 +201,14 @@
     function inserted() { return Atomics.load(hdr, INSERTED); }
     function kindOf(index) { return Atomics.load(hdr, CARD_KIND + index); }
 
+    // Counted if wallet-track.js is on the page and ignored if it is not, which
+    // is every case but the deployed one: the worker loads this same file with
+    // importScripts and has no page to find a tracker on, and a clone that
+    // serves no analytics still has a working tray.
+    function track(action, name) {
+      if (scope.Track) scope.Track.event("cards", action, name);
+    }
+
     // Swapping the type is swapping the card, not reconfiguring one: Python
     // keeps a card of each type per slot and reads this to decide which of them
     // the reader would be holding. No sequence number to bump, because a slot
@@ -254,19 +262,27 @@
       var kindButton = event.target.closest(".cardtray-kind");
       if (kindButton) {
         var slot = Number(kindButton.dataset.index);
-        setKind(slot, 1 - kindOf(slot));
+        var swapped = 1 - kindOf(slot);
+        setKind(slot, swapped);
+        track("swap-type", KINDS[swapped]);
         kindButton.blur();
         return;
       }
       var button = event.target.closest(".cardtray-card");
       if (!button) return;
-      toggle(Number(button.dataset.index));
+      var index = Number(button.dataset.index);
+      // The same button does both, so which of them it just did is the thing
+      // worth recording: a tray full of ejects and no inserts is a different
+      // story from the reverse.
+      track(inserted() === index ? "eject" : "insert", labelFor(index));
+      toggle(index);
       // Clicking focuses the button, and a focused button keeps Enter (below).
       // Handing focus back means the wallet still answers the keyboard right
       // after a card has been put in, which is exactly when it is wanted.
       button.blur();
     });
     ejectButton.addEventListener("click", function () {
+      track("eject", labelFor(inserted()));
       eject();
       ejectButton.blur();
     });

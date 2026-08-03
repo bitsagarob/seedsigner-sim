@@ -8,9 +8,10 @@ decoder it chose, and the simulated card layer says which card the Python side
 saw. Asserting on those lines is a statement about what the wallet actually did,
 which a screenshot is not.
 
-That narration is off unless the page is loaded with ?debug=1, so wallet_url()
-always adds it. Without it every test in this suite would sit and time out
-against a wallet that is working perfectly.
+The page reads that narration itself now and so always asks the worker for it,
+but only ?debug=1 puts it on the console, which is where these tests read it
+from, so wallet_url() always adds it. Without it every test in this suite would
+sit and time out against a wallet that is working perfectly.
 """
 
 import base64
