@@ -159,7 +159,7 @@ HEADER
 #
 # jsQR 1.4.0, Apache-2.0, is the file published as dist/jsQR.js in the npm
 # package jsqr@1.4.0, unmodified. To confirm that independently, and not just
-# that it matches the line below:
+# that it matches the src/web/jsQR.js line below:
 #
 #     curl -sL https://registry.npmjs.org/jsqr/-/jsqr-1.4.0.tgz | tar xzO package/dist/jsQR.js | sha256sum
 
