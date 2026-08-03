@@ -38,72 +38,167 @@ import time
 
 from embit import bip32, ec
 
+from pysatochip.JCconstants import (
+    JCconstants,
+    SEEDKEEPER_DIC_EXPORT_RIGHTS,
+    SEEDKEEPER_DIC_ORIGIN,
+    SEEDKEEPER_LOG_RES_DIC,
+)
+
 from smartcard.Exceptions import CardConnectionException, NoCardException
 
-# CLAs and INSs, from pysatochip's CardConnector and JCconstants.
-CLA_ISO = 0x00
-CLA_GP = 0x80
-CLA_CARDEDGE = 0xB0
+# --------------------------------------------------------------- the card's own
+#
+# The instruction bytes and status words are the applet's, not this file's, so
+# they are read out of pysatochip rather than copied from it. A transcribed hex
+# byte agrees with upstream on the day somebody types it and never again; an
+# imported one cannot drift, and a name upstream renames or drops stops this
+# module importing instead of leaving a card answering a value nobody rechecked.
+#
+# pysatochip.JCconstants is the only part of pysatochip reached from here, and
+# deliberately so. It is a file of constants with no imports of its own, so it
+# costs nothing and it works in both of the places this module runs: inside
+# Pyodide, where the wallet zip is unpacked to /wallet and everything in it is
+# importable, and outside it, where test/test_cards.py puts the same zip on
+# sys.path and zipimport reads the package straight out of it. The rest of
+# pysatochip is not usable from here at any price -- CardConnector, which is
+# where the values JCconstants lacks live, itself imports `smartcard`, so
+# importing it would import this very package while it is still being defined.
+#
+# Which values have no importable source, and what they are instead, is the
+# second half of this block. docs/ARCHITECTURE.md maps every instruction below
+# to the applet source that defines it.
 
+
+def _sw(status_word):
+    """One of pysatochip's 16-bit status words, as the two bytes a card returns.
+
+    JCconstants writes a status word the way the applet throws it, as a short;
+    pyscard hands back sw1 and sw2. One value in two shapes, converted here
+    rather than kept in a second form that could disagree with the first.
+    """
+    return (status_word >> 8, status_word & 0xFF)
+
+
+def _code_for(dictionary, name):
+    """The byte pysatochip files `name` under, out of one of its own tables.
+
+    Looked up by name because the name is the stable half: the wallet asks for
+    'Plaintext export allowed' and the dictionary is what turns that into a
+    number, so agreeing with the dictionary is what makes this card's policy the
+    same policy. A name that is no longer there raises rather than defaulting.
+    """
+    for code, known in dictionary.items():
+        if known == name:
+            return code
+    raise KeyError(f"pysatochip no longer names {name!r}")
+
+
+# The card-edge class byte, and the instructions both applets answer.
+CLA_CARDEDGE = JCconstants.CardEdge_CLA
+
+INS_GET_STATUS = JCconstants.INS_GET_STATUS
+INS_SETUP = JCconstants.INS_SETUP
+INS_VERIFY_PIN = JCconstants.INS_VERIFY_PIN
+INS_BIP32_IMPORT_SEED = JCconstants.INS_BIP32_IMPORT_SEED
+INS_BIP32_GET_EXTENDED_KEY = JCconstants.INS_BIP32_GET_EXTENDED_KEY
+INS_BIP32_GET_AUTHENTIKEY = JCconstants.INS_BIP32_GET_AUTHENTIKEY
+INS_BIP32_RESET_SEED = JCconstants.INS_BIP32_RESET_SEED
+
+# P2 for the SeedKeeper's multi-step instructions. Import runs INIT / PROCESS* /
+# FINAL; export and the header listing run INIT then PROCESS until the card says
+# it has nothing more. Called OP_NEXT here because "next" is what that step means
+# in those two, but it is upstream's OP_PROCESS byte and not a second opinion.
+OP_INIT = JCconstants.OP_INIT
+OP_NEXT = JCconstants.OP_PROCESS
+OP_FINAL = JCconstants.OP_FINALIZE
+
+SW_OK = _sw(JCconstants.SW_OK)
+SW_NO_MEMORY_LEFT = _sw(JCconstants.SW_NO_MEMORY_LEFT)
+SW_AUTH_FAILED = _sw(JCconstants.SW_AUTH_FAILED)
+SW_OPERATION_NOT_ALLOWED = _sw(JCconstants.SW_OPERATION_NOT_ALLOWED)
+SW_SETUP_NOT_DONE = _sw(JCconstants.SW_SETUP_NOT_DONE)
+SW_UNAUTHORIZED = _sw(JCconstants.SW_UNAUTHORIZED)
+SW_IDENTITY_BLOCKED = _sw(JCconstants.SW_IDENTITY_BLOCKED)
+SW_INVALID_PARAMETER = _sw(JCconstants.SW_INVALID_PARAMETER)
+SW_INCORRECT_P1 = _sw(JCconstants.SW_INCORRECT_P1)
+SW_INCORRECT_P2 = _sw(JCconstants.SW_INCORRECT_P2)
+SW_SEQUENCE_END = _sw(JCconstants.SW_SEQUENCE_END)
+SW_BIP32_UNINITIALIZED_SEED = _sw(JCconstants.SW_BIP32_UNINITIALIZED_SEED)
+
+# Two the SeedKeeper reads differently from the Satochip-era class above, so they
+# come from the SeedKeeper's own table instead: 0x9C08 is SW_OBJECT_EXISTS there
+# and 'Secret not found' here, which is the meaning this card answers with, and
+# 0x9C31 exists only here.
+SW_SECRET_NOT_FOUND = _sw(_code_for(SEEDKEEPER_LOG_RES_DIC, "Secret not found"))
+SW_EXPORT_NOT_ALLOWED = _sw(_code_for(SEEDKEEPER_LOG_RES_DIC, "Export not allowed"))
+
+# The one value of SEEDKEEPER_DIC_EXPORT_RIGHTS that lets a secret leave the card
+# in the clear. The other three -- forbidden, encrypted only, authenticated only --
+# are all refusals here, and refusing them is the whole of the policy this card
+# enforces.
+PLAINTEXT_EXPORT_ALLOWED = _code_for(SEEDKEEPER_DIC_EXPORT_RIGHTS,
+                                     "Plaintext export allowed")
+
+# Where a secret came from, SEEDKEEPER_DIC_ORIGIN. The card sets this itself: it
+# is a statement about how the bytes arrived, so the client does not get a say.
+ORIGIN_PLAINTEXT_IMPORT = _code_for(SEEDKEEPER_DIC_ORIGIN, "Plaintext import")
+
+# ------------------------------------------------ and what upstream cannot say
+#
+# Everything below has no name in JCconstants and no other importable source, so
+# it stays written out. Each says where the real value lives, because a value a
+# reader cannot check is the thing this block exists to avoid.
+
+# ISO 7816-4, and so the platform's rather than either applet's: SELECT is
+# answered by the card manager before any applet is chosen, and both status
+# words are thrown by the JavaCard runtime as ISO7816.SW_*. pysatochip carries
+# the SELECT header as CardConnector.SELECT and has no name for either word.
+CLA_ISO = 0x00
 INS_SELECT = 0xA4
+SW_FILE_NOT_FOUND = (0x6A, 0x82)
+SW_INS_NOT_SUPPORTED = (0x6D, 0x00)
+
+# GlobalPlatform GET DATA, which is not an applet instruction either: it is asked
+# of the card manager. pysatochip sends it from three methods that each write
+# `ins = 0xCA  # GPSession.INS_GET_DATA` as a local variable, and a local is not
+# a name any file can import.
+CLA_GP = 0x80
 INS_GET_DATA = 0xCA
-INS_GET_STATUS = 0x3C
-INS_SETUP = 0x2A
-INS_VERIFY_PIN = 0x42
-INS_BIP32_IMPORT_SEED = 0x6C
-INS_BIP32_GET_EXTENDED_KEY = 0x6D
-INS_BIP32_GET_AUTHENTIKEY = 0x73
-INS_BIP32_RESET_SEED = 0x77
+
+# The SeedKeeper's own instruction set, for the same reason: CardConnector writes
+# each of these as a local `ins = 0xA7` inside the method that sends it.
+# JCconstants names three of the five in SEEDKEEPER_LOG_INS_DIC, but that is a
+# table for decoding a card's log rather than an instruction set, and importing
+# three of five while transcribing the other two would leave a reader with two
+# places to check instead of one.
 INS_SEEDKEEPER_IMPORT_SECRET = 0xA1
 INS_SEEDKEEPER_EXPORT_SECRET = 0xA2
 INS_SEEDKEEPER_RESET_SECRET = 0xA5
 INS_SEEDKEEPER_LIST_HEADERS = 0xA6
 INS_SEEDKEEPER_GET_STATUS = 0xA7
 
-# P2 for the SeedKeeper's multi-step instructions. Import runs INIT / PROCESS* /
-# FINAL; export and the header listing run INIT then NEXT until the card says it
-# has nothing more.
-OP_INIT = 0x01
-OP_NEXT = 0x02
-OP_FINAL = 0x03
-
 # P1: whether the secret crosses in the clear or encrypted to another card's key.
-# Only the plaintext half is implemented here.
+# Only the plaintext half is implemented here. Also a bare literal in the methods
+# that send it.
 EXPORT_PLAIN = 0x01
 
-SW_OK = (0x90, 0x00)
-SW_FILE_NOT_FOUND = (0x6A, 0x82)
-SW_INS_NOT_SUPPORTED = (0x6D, 0x00)
-SW_NO_MEMORY_LEFT = (0x9C, 0x01)
-SW_AUTH_FAILED = (0x9C, 0x02)
-SW_OPERATION_NOT_ALLOWED = (0x9C, 0x03)
-SW_SETUP_NOT_DONE = (0x9C, 0x04)
-SW_UNAUTHORIZED = (0x9C, 0x06)
-SW_SECRET_NOT_FOUND = (0x9C, 0x08)
-SW_IDENTITY_BLOCKED = (0x9C, 0x0C)
-SW_INVALID_PARAMETER = (0x9C, 0x0F)
-SW_INCORRECT_P1 = (0x9C, 0x10)
-SW_INCORRECT_P2 = (0x9C, 0x11)
-SW_SEQUENCE_END = (0x9C, 0x12)
-SW_BIP32_UNINITIALIZED_SEED = (0x9C, 0x14)
+# 0x9C17, which the Satochip applet calls SW_BIP32_INITIALIZED_SEED. The Satochip
+# list in JCconstants stops short of it and CardConnector only spells it out
+# inside the text of an error message, so there is nothing to import.
 SW_BIP32_ALREADY_SEEDED = (0x9C, 0x17)
-SW_EXPORT_NOT_ALLOWED = (0x9C, 0x31)
 
-# What a Satochip will hold a seed of, in bytes. A BIP39 seed is 64.
+# What a Satochip will hold a seed of, in bytes. A BIP39 seed is 64. This card's
+# own range, checked so that a seed too short to be one is refused rather than
+# quietly stored.
 SEED_SIZES = range(16, 65)
 
+# The two applet AIDs, which live on CardConnector as class attributes and so
+# cannot be imported here without importing the module that imports this one.
+# They are ASCII: "SatoChip" and "SeedKeeper", the package AIDs the two applet
+# repositories install under.
 SATOCHIP_AID = [0x53, 0x61, 0x74, 0x6F, 0x43, 0x68, 0x69, 0x70]
 SEEDKEEPER_AID = [0x53, 0x65, 0x65, 0x64, 0x4B, 0x65, 0x65, 0x70, 0x65, 0x72]
-
-# The one value of SEEDKEEPER_DIC_EXPORT_RIGHTS that lets a secret leave the card
-# in the clear. The other three -- forbidden, encrypted only, authenticated only --
-# are all refusals here, and refusing them is the whole of the policy this card
-# enforces.
-PLAINTEXT_EXPORT_ALLOWED = 0x01
-
-# Where a secret came from, SEEDKEEPER_DIC_ORIGIN. The card sets this itself: it
-# is a statement about how the bytes arrived, so the client does not get a say.
-ORIGIN_PLAINTEXT_IMPORT = 0x01
 
 # Object memory on a SeedKeeper, in bytes. The absolute number is a card's own
 # business; what matters is that the wallet's estimate of what a secret will cost

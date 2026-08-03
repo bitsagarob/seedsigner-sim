@@ -116,17 +116,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# The committed third-party files
+# The committed build inputs
 # ---------------------------------------------------------------------------
 #
 # Separate from Pyodide, and cheap, so it runs on every invocation: build/
-# checksums.txt lists the third-party files that ARE committed to this
-# repository. Anyone can also run
+# checksums.txt lists every file that is committed to this repository and then
+# served or packaged as-is. Anyone can also run
 #
 #     sha256sum -c build/checksums.txt
 #
 # from the repository root; the loop below exists so that the check works the
 # same way on a machine whose sha256 tool is shasum.
+#
+# Two directories get a second question asked of them as well. src/smartcard and
+# src/fakes are copied into a wallet zip whole rather than file by file, so
+# checking only the files the manifest happens to name would miss a file added to
+# one of them: it would reach the zip, move its hash, and be listed nowhere.
+
+MANIFEST_DIRS="src/smartcard src/fakes"
 
 verify_checksums() {
     [ -f "${CHECKSUMS_FILE}" ] || die "missing ${CHECKSUMS_FILE}"
@@ -153,12 +160,37 @@ verify_checksums() {
         checked=$((checked + 1))
     done < "${CHECKSUMS_FILE}"
 
-    [ "${failures}" -eq 0 ] || die "${failures} committed third-party file(s) do not match build/checksums.txt"
+    [ "${failures}" -eq 0 ] || die "${failures} committed file(s) do not match build/checksums.txt"
     [ "${checked}" -gt 0 ]  || die "build/checksums.txt listed nothing to check"
 }
 
-step "checking committed third-party files against build/checksums.txt"
+# The other direction, for the two directories that go into a zip wholesale.
+# __pycache__ is skipped because it is generated, gitignored, and stripped from
+# the staged tree by the build before it writes anything.
+verify_manifest_covers() {
+    local dir file rel unlisted=0
+
+    for dir in ${MANIFEST_DIRS}; do
+        [ -d "${REPO_ROOT}/${dir}" ] || die "missing ${REPO_ROOT}/${dir}"
+        while IFS= read -r file; do
+            rel="${file#"${REPO_ROOT}/"}"
+            if awk -v want="${rel}" '$2 == want { found = 1 } END { exit !found }' \
+                   "${CHECKSUMS_FILE}"; then
+                continue
+            fi
+            echo "    UNLISTED ${rel}" >&2
+            unlisted=$((unlisted + 1))
+        done < <(find "${REPO_ROOT}/${dir}" -type f \
+                      ! -name '*.pyc' ! -path '*/__pycache__/*')
+    done
+
+    [ "${unlisted}" -eq 0 ] || die "${unlisted} file(s) under ${MANIFEST_DIRS} are packaged into a wallet zip but are not in build/checksums.txt"
+    echo "    ok       every file under ${MANIFEST_DIRS} is listed"
+}
+
+step "checking committed build inputs against build/checksums.txt"
 verify_checksums
+verify_manifest_covers
 
 # ---------------------------------------------------------------------------
 # Is the runtime already here and correct?

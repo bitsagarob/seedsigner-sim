@@ -48,9 +48,11 @@ verified than committed.
 ```
 
 `fetch-assets.sh --check` re-verifies what is already on disk, and
-`sha256sum -c build/checksums.txt` covers the third-party files that *are*
-committed (jsQR). Both scripts explain their trust chain in their own header
-comments; they are worth a read before you run them.
+`sha256sum -c build/checksums.txt` covers everything that is committed and then
+served or packaged as it stands: jsQR, the page and its scripts, the three shims,
+and the stand-in packages in `src/smartcard/` and `src/fakes/` that the build
+copies into a wallet zip. Both scripts explain their trust chain in their own
+header comments; they are worth a read before you run them.
 
 ## Running it locally
 

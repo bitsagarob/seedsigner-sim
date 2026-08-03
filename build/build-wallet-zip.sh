@@ -25,7 +25,8 @@
 # For that comparison to mean anything the build has to be reproducible, so:
 #
 #   * every input is content-addressed -- upstream and the git-pinned
-#     dependencies by commit sha, the PyPI dependencies by artifact sha256;
+#     dependencies by commit sha, the PyPI dependencies by artifact sha256, and
+#     this repository's own stand-in packages by build/checksums.txt;
 #   * the zip is written by hand rather than by the zip(1) command, with fixed
 #     timestamps (SOURCE_DATE_EPOCH), fixed permissions, fixed entry order, and
 #     no __pycache__ or .pyc anywhere;
@@ -51,6 +52,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 OUT_DIR="${REPO_ROOT}/build/out"
+CHECKSUMS_FILE="${REPO_ROOT}/build/checksums.txt"
 CACHE_DIR="${WALLET_BUILD_CACHE:-${XDG_CACHE_HOME:-${HOME}/.cache}/seedsigner-sim-build}"
 KEEP_STAGING="no"
 
@@ -77,6 +79,14 @@ Environment:
   SOURCE_DATE_EPOCH   Timestamp stamped into every zip entry. Defaults to the
                       commit date of the pinned upstream commit, so two people
                       who run this with no environment set get the same bytes.
+  SS_REPO             Build from this clone URL instead of the pinned one.
+  SS_COMMIT           Build from this commit, branch or tag instead of the pin.
+
+                      Either or both, for testing your own SeedSigner fork in
+                      the simulator. The zip you get will not hash to what
+                      UPSTREAM publishes, because it is not that build, and it
+                      says so in wallet-FIRMWARE.build-info.json and in the
+                      page's technical details panel. See CONTRIBUTING.md.
 USAGE
 }
 
@@ -451,11 +461,50 @@ git_checkout() {
     GIT_TERMINAL_PROMPT=0 git -C "${dest}" -c advice.detachedHead=false \
         checkout --quiet FETCH_HEAD
 
-    local head
-    head="$(git -C "${dest}" rev-parse HEAD)"
-    if [ "${head}" != "${commit}" ]; then
-        die "checkout of ${url} landed on ${head}, expected ${commit}"
+    # Only when a sha is what was asked for, which is every row of the dependency
+    # table and the pin itself. An SS_COMMIT override may name a branch or a tag,
+    # which has no sha to compare against here; the caller reads back what it
+    # resolved to and records that instead.
+    if [ "${#commit}" -eq 40 ] && [ -z "${commit//[0-9a-f]/}" ]; then
+        local head
+        head="$(git -C "${dest}" rev-parse HEAD)"
+        if [ "${head}" != "${commit}" ]; then
+            die "checkout of ${url} landed on ${head}, expected ${commit}"
+        fi
     fi
+}
+
+# verify_against_manifest DIR
+#
+# Every file under DIR has to be listed in build/checksums.txt and hash to what
+# it says. This is the only input to the zip that is not already content
+# addressed: upstream and the git dependencies are pinned by commit, the PyPI
+# ones by artifact sha256, and these packages were copied out of the working tree
+# as they happened to be. So a modified simulated card produced a different zip
+# and nothing in the repository said which byte had moved.
+#
+# Both directions, because both are the same mistake here: a file that changed
+# and a file that was added both end up in the zip, and the directory is copied
+# whole. build/fetch-assets.sh --check asks the same two questions of the same
+# file, so a checkout can be verified without building anything.
+verify_against_manifest() {
+    local dir="$1" file rel expected actual
+
+    [ -f "${CHECKSUMS_FILE}" ] || die "missing ${CHECKSUMS_FILE}"
+
+    while IFS= read -r file; do
+        rel="${file#"${REPO_ROOT}/"}"
+        expected="$(awk -v want="${rel}" '$2 == want { print $1 }' "${CHECKSUMS_FILE}")"
+        [ -n "${expected}" ] || die "${rel} would be packaged into the zip but is not listed in build/checksums.txt"
+
+        actual="$(sha256_of "${file}")"
+        if [ "${actual}" != "${expected}" ]; then
+            die "${rel} does not match build/checksums.txt
+  expected ${expected}
+  got      ${actual}
+If the change is deliberate, update build/checksums.txt in the same commit."
+        fi
+    done < <(find "${dir}" -type f ! -name '*.pyc' ! -path '*/__pycache__/*')
 }
 
 # find_license ROOT
@@ -502,24 +551,61 @@ upstream_field() {
     ' "${UPSTREAM_FILE}"
 }
 
-UPSTREAM_REPO="$(upstream_field repo)"
-UPSTREAM_COMMIT="$(upstream_field commit)"
+PINNED_REPO="$(upstream_field repo)"
+PINNED_COMMIT="$(upstream_field commit)"
 
-[ -n "${UPSTREAM_REPO}" ]   || die "no 'repo =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
-[ -n "${UPSTREAM_COMMIT}" ] || die "no 'commit =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+[ -n "${PINNED_REPO}" ]   || die "no 'repo =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+[ -n "${PINNED_COMMIT}" ] || die "no 'commit =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
 
-case "${UPSTREAM_COMMIT}" in
+case "${PINNED_COMMIT}" in
     [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
-    *) die "commit in ${UPSTREAM_FILE} is not a sha: ${UPSTREAM_COMMIT}" ;;
+    *) die "commit in ${UPSTREAM_FILE} is not a sha: ${PINNED_COMMIT}" ;;
 esac
 
+# The one supported way to build something that is not the pin: SS_REPO and
+# SS_COMMIT. People fork SeedSigner, and the reasonable question "does my fork
+# work in this simulator?" had no answer that did not involve editing UPSTREAM
+# and then remembering to put it back. Either variable on its own is enough --
+# a fork of the pinned repo needs only SS_COMMIT, and a rename only SS_REPO.
+#
+# SS_COMMIT may be any ref git can fetch, a branch or a tag as well as a sha,
+# because somebody testing their own work has one checked out and not a sha
+# memorised. Whatever it resolves to is read back afterwards and that is what
+# gets recorded, so the build still says exactly what it built.
+#
+# What an override may NOT do is come out looking like the published build. It
+# is not one, its hashes will not match the ones UPSTREAM publishes, and that is
+# the correct outcome rather than a fault -- but only if it is visible. See the
+# build-info.json section at the bottom, which is where the page reads it from.
+OVERRIDDEN="no"
+UPSTREAM_REPO="${PINNED_REPO}"
+UPSTREAM_COMMIT="${PINNED_COMMIT}"
+
+if [ -n "${SS_REPO:-}" ] || [ -n "${SS_COMMIT:-}" ]; then
+    OVERRIDDEN="yes"
+    UPSTREAM_REPO="${SS_REPO:-${PINNED_REPO}}"
+    UPSTREAM_COMMIT="${SS_COMMIT:-${PINNED_COMMIT}}"
+fi
+
 step "firmware ${FIRMWARE}"
-step "upstream ${UPSTREAM_REPO} @ ${UPSTREAM_COMMIT}"
+if [ "${OVERRIDDEN}" = "yes" ]; then
+    step "OVERRIDE: SS_REPO/SS_COMMIT are set, so this is NOT the published build"
+    step "upstream ${UPSTREAM_REPO} @ ${UPSTREAM_COMMIT}  (pin was ${PINNED_REPO} @ ${PINNED_COMMIT})"
+else
+    step "upstream ${UPSTREAM_REPO} @ ${UPSTREAM_COMMIT}"
+fi
+
 UPSTREAM_SRC="${SOURCES}/upstream"
 git_checkout "${UPSTREAM_REPO}" "${UPSTREAM_COMMIT}" "${UPSTREAM_SRC}"
 
+# A ref is not an identity, so what it resolved to is what gets recorded from
+# here on. For the pin this changes nothing: git_checkout already refused to
+# continue unless HEAD was that exact sha.
+UPSTREAM_COMMIT="$(git -C "${UPSTREAM_SRC}" rev-parse HEAD)"
+[ "${OVERRIDDEN}" = "no" ] || step "which is commit ${UPSTREAM_COMMIT}"
+
 for required in src/seedsigner src/main.py LICENSE.md; do
-    [ -e "${UPSTREAM_SRC}/${required}" ] || die "pinned upstream tree is missing ${required}"
+    [ -e "${UPSTREAM_SRC}/${required}" ] || die "the tree at ${UPSTREAM_COMMIT} is missing ${required}"
 done
 
 # ---------------------------------------------------------------------------
@@ -570,12 +656,20 @@ cp    -- "${UPSTREAM_SRC}/LICENSE.md"     "${STAGING}/licenses/SeedSigner.LICENS
 # Nothing the other firmware never imports is shipped to it. A zip whose claim
 # is "the pin, its pinned dependencies and this repository's stand-ins, and
 # nothing else" should not carry a package that is dead on arrival.
+#
+# Each one is checked against build/checksums.txt before it is copied, so that
+# last clause names a specific set of bytes rather than whatever the working tree
+# happened to hold. It is the same manifest build/fetch-assets.sh --check reads,
+# and the same two questions: does every file hash to what it should, and is
+# every file in the directory listed at all.
 
 MANIFEST_STAGED=""
 
 for entry in "${STAGE_PACKAGES[@]}"; do
     IFS=':' read -r source name description <<< "${entry}"
     [ -f "${source}/__init__.py" ] || die "missing ${source}/__init__.py"
+    step "stand-in ${name} (${source#"${REPO_ROOT}/"})"
+    verify_against_manifest "${source}"
     cp -R -- "${source}" "${STAGING}/${name}"
     MANIFEST_STAGED="${MANIFEST_STAGED}$(printf '%-22s %-26s %s' "${name}" "this repository" "${description}")
 "
@@ -779,6 +873,17 @@ fi
 # ones this run just printed. They are what a reader is asked to compare
 # against, so a build that stopped reproducing has to show up as a mismatch on
 # the page rather than quietly publishing whatever it produced.
+#
+# Which is also what makes an SS_REPO/SS_COMMIT override announce itself with no
+# special case: the published hashes stay published hashes, the zip beside them
+# is a different zip, and the page's own check compares the two and puts up "the
+# wallet zip this page loaded is not the published build" in as many words. The
+# three fields below add what that verdict cannot say on its own -- that the
+# difference is an override rather than tampering, and what it was built from.
+#
+# A build from the pin writes exactly the bytes it wrote before this existed.
+# Nothing is added to describe a build that has not changed, so a deployment does
+# not have to be touched for a firmware nobody rebuilt.
 
 UPSTREAM_TAG="$(upstream_field tag)"
 PUBLISHED_ZIP_SHA256="$(upstream_field wallet_zip_sha256)"
@@ -787,6 +892,16 @@ PUBLISHED_CONTENTS_SHA256="$(upstream_field wallet_zip_contents_sha256)"
 [ -n "${UPSTREAM_TAG}" ]               || die "no 'tag =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
 [ -n "${PUBLISHED_ZIP_SHA256}" ]       || die "no 'wallet_zip_sha256 =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
 [ -n "${PUBLISHED_CONTENTS_SHA256}" ]  || die "no 'wallet_zip_contents_sha256 =' line in the [${FIRMWARE}] section of ${UPSTREAM_FILE}"
+
+# What the panel shows in its first two rows, which is where a reader starts.
+# There is no tag on an override -- the pin's tag describes the pin's commit and
+# nothing else -- so the row says what happened instead of showing a release name
+# that would be a lie or an empty box that would say nothing at all.
+INFO_FIRMWARE_TEXT="${FIRMWARE}"
+if [ "${OVERRIDDEN}" = "yes" ]; then
+    INFO_FIRMWARE_TEXT="${FIRMWARE}, but NOT the published build: built from an SS_REPO / SS_COMMIT override rather than from the pin in UPSTREAM, so none of the hashes below will match and that is correct"
+    UPSTREAM_TAG="none: an override is not a release"
+fi
 
 # The runtime is fetched by another script and pinned there, which makes that
 # script the one place the version is written down.
@@ -798,7 +913,7 @@ PYODIDE_VERSION="$(sed -n 's/^PYODIDE_VERSION="\([^"]*\)".*$/\1/p' "${ASSETS_SCR
 OUT_INFO="${OUT_DIR}/wallet-${FIRMWARE}.build-info.json"
 
 step "writing ${OUT_INFO}"
-INFO_FIRMWARE="${FIRMWARE}" \
+INFO_FIRMWARE="${INFO_FIRMWARE_TEXT}" \
 INFO_REPO="${UPSTREAM_REPO}" \
 INFO_COMMIT="${UPSTREAM_COMMIT}" \
 INFO_TAG="${UPSTREAM_TAG}" \
@@ -807,6 +922,10 @@ INFO_ZIP_SHA256="${PUBLISHED_ZIP_SHA256}" \
 INFO_CONTENTS_SHA256="${PUBLISHED_CONTENTS_SHA256}" \
 INFO_PYODIDE="${PYODIDE_VERSION}" \
 INFO_DEPENDENCIES="${DEPENDENCIES}" \
+INFO_OVERRIDDEN="${OVERRIDDEN}" \
+INFO_PINNED_REPO="${PINNED_REPO}" \
+INFO_PINNED_COMMIT="${PINNED_COMMIT}" \
+INFO_BUILT_SHA256="$(sha256_of "${OUT_ZIP}")" \
 python3 - "${OUT_INFO}" <<'PY'
 import json
 import os
@@ -838,6 +957,24 @@ info = {
     "dependencies": dependencies,
 }
 
+# Only on an override, so a build from the pin writes what it always wrote. The
+# two hashes above stay the published ones on purpose: they are what a reader is
+# asked to compare against, and here they are what this zip is being said not to
+# be. published_build says so for a machine; the firmware line above says so for
+# a person; the zip's own sha256 is here so the two can be compared without
+# fetching anything.
+if os.environ["INFO_OVERRIDDEN"] == "yes":
+    info["published_build"] = False
+    info["override"] = {
+        "reason": "SS_REPO / SS_COMMIT were set, so this was built from a tree "
+                  "this repository does not pin. It is not the published build, "
+                  "its hashes will not match the published ones, and that is the "
+                  "expected result rather than a failure.",
+        "pinned_repo": os.environ["INFO_PINNED_REPO"],
+        "pinned_commit": os.environ["INFO_PINNED_COMMIT"],
+        "built_sha256": os.environ["INFO_BUILT_SHA256"],
+    }
+
 # Nothing dated, nothing about this machine, nothing from a set: two runs of
 # this script write the same bytes, the same way the zip beside it does.
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
@@ -851,7 +988,23 @@ echo "  ${OUT_ZIP}"
 echo "  ${OUT_MANIFEST}"
 echo "  ${OUT_INFO}"
 echo
-echo "Compare the zip sha256 above with the wallet-${FIRMWARE}.zip you were served,"
-echo "and with the [${FIRMWARE}] section of UPSTREAM."
-echo "If those differ but the contents sha256 matches, the two builds hold the"
-echo "same files and you are looking at a zlib difference, not a code difference."
+
+if [ "${OVERRIDDEN}" = "yes" ]; then
+    # Last thing on the screen, because the first thing was minutes ago and the
+    # mistake this guards against is walking away with a zip you think is the
+    # published one.
+    echo "THIS IS NOT THE PUBLISHED BUILD."
+    echo
+    echo "  built from  ${UPSTREAM_REPO} @ ${UPSTREAM_COMMIT}"
+    echo "  the pin is  ${PINNED_REPO} @ ${PINNED_COMMIT}"
+    echo
+    echo "So its sha256 will not be the one the [${FIRMWARE}] section of UPSTREAM"
+    echo "publishes, and a page serving it will say the zip it loaded is not the"
+    echo "published build. That is the right answer for a build from your own tree,"
+    echo "not a fault. Unset SS_REPO and SS_COMMIT and rebuild to get the pinned one."
+else
+    echo "Compare the zip sha256 above with the wallet-${FIRMWARE}.zip you were served,"
+    echo "and with the [${FIRMWARE}] section of UPSTREAM."
+    echo "If those differ but the contents sha256 matches, the two builds hold the"
+    echo "same files and you are looking at a zlib difference, not a code difference."
+fi

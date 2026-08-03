@@ -6,19 +6,23 @@
 # packages in src/smartcard and src/fakes. That is the property the build script
 # exists to let you check for yourself.
 #
-# Two named sections, one per firmware. Every consumer of this file names the
-# section it wants: build/build-wallet-zip.sh, which assembles the zip, and the
-# two workflows that re-derive its hash and run upstream's own tests against our
-# pins. Nothing reads a key outside a section, so the parsers cannot silently
-# pick up the wrong firmware's pin if a section is renamed or removed.
+# Named sections, and every consumer of this file names the section it wants:
+# build/build-wallet-zip.sh, which assembles the zip, and the two workflows that
+# re-derive its hash and run upstream's own tests against our pins. Nothing reads
+# a key outside a section, so the parsers cannot silently pick up the wrong pin
+# if a section is renamed or removed.
 #
-# Both pins are release tags rather than branch tips. A tip moves: rebase or
-# force-push dev and the sha stops existing on the remote, at which point every
+# The first two sections are the two firmwares, and only those two are built. The
+# two after them pin the smartcard applets, which nothing here builds at all; the
+# comment above them says what they are for.
+#
+# Every pin here is a release tag rather than a branch tip. A tip moves: rebase
+# or force-push dev and the sha stops existing on the remote, at which point every
 # rebuild described here fails at the fetch, for everyone, permanently. A tag is
 # a name upstream has published and does not move. The sha is still the pin; the
 # tag only says which release it is.
 #
-# Each section also publishes the two hashes of the wallet zip that
+# Each firmware section also publishes the two hashes of the wallet zip that
 # build/build-wallet-zip.sh produces from that pin. Rebuild it yourself and
 # compare; if these differ, something between that commit and the file you were
 # served is not what it claims to be.
@@ -44,5 +48,34 @@ repo   = https://github.com/3rdIteration/seedsigner.git
 commit = 662d9dba2327eb77d6924ae9bd62d4902bf24634
 tag    = SeSi-0.8.7+ShSi-B11
 
-wallet_zip_sha256          = 3d6a150df29ee18b52931900418341b45a597beb0dc3c14545de99f999a7dd74
-wallet_zip_contents_sha256 = c783f8bef83c5d7d577515d27ff02fb221d9057dada68aa7339de9749934ecac
+wallet_zip_sha256          = 22e6034509b547242db58ea7303d3f605007c60e637444b173e505eabbb834ca
+wallet_zip_contents_sha256 = d2527f58d122a7155343b215b596dc94991dad5e893b9f5ec30da6ffe1463684
+
+# The two smartcard applets, pinned as a reference rather than as an input.
+#
+# Nothing here builds these. They are JavaCard, they run on a secure element,
+# and src/smartcard/ emulates them in Python instead: it answers their APDUs so
+# that pysatochip and the wallet above it run unmodified. No build script reads
+# the two sections below and no artifact contains a byte of them.
+#
+# They are pinned because "we emulate a SeedKeeper" is a claim with a version in
+# it. An applet gains instructions between releases, and a simulator that does
+# not say which release it is imitating cannot be checked against anything. So
+# these record which one: the tag whose protocol version each simulated card
+# reports in its own GET STATUS answer, which is what the wallet reads to decide
+# how to lay a seed out. docs/ARCHITECTURE.md maps every APDU src/smartcard/
+# answers to the source file and the constant in these two trees that defines
+# it, and lists what those trees have that this simulation deliberately does not.
+#
+# Tag naming is the applets' own: v0.12 is Satochip protocol 0.12, and v0.2-0.1
+# is SeedKeeper protocol 0.2, applet build 0.1.
+
+[satochip-applet]
+repo   = https://github.com/Toporin/SatochipApplet.git
+commit = c3baeb6b1b84f5bdd05b47bbf2dd9cf8631c11ef
+tag    = v0.12
+
+[seedkeeper-applet]
+repo   = https://github.com/Toporin/Seedkeeper-Applet.git
+commit = 2e59f0653c5dd39f6793ee5c41ee7344ffdeb48f
+tag    = v0.2-0.1

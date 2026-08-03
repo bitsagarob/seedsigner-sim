@@ -271,6 +271,65 @@ would drift.
 | `SEEDKEEPER RESET SECRET` (`B0 A5`) | SeedKeeper | forgets one, and gives back the space it took |
 | anything else | | `6D00`, "not supported" |
 
+### Which applet defines each of those
+
+The bytes in that table are not this project's to choose, and neither is what a
+card is allowed to answer them with. They come from two JavaCard applets, and
+[`UPSTREAM`](../UPSTREAM) pins both: `[satochip-applet]` at `v0.12` and
+`[seedkeeper-applet]` at `v0.2-0.1`. Nothing here builds them. They run on a
+secure element and this package emulates them in Python, so the pin is a
+statement about *which release is being imitated* rather than a build input; the
+version each simulated card reports in its own `GET STATUS` is the one those tags
+carry.
+
+Paths below are `src/org/satochip/applet/CardEdge.java` in the Satochip tree and
+`src/main/java/org/seedkeeper/applet/SeedKeeper.java` in the SeedKeeper one. The
+Python side gets the same values from `pysatochip.JCconstants` at import time
+rather than transcribing them, so the only things written out in
+`simulated_card.py` are the ones neither the applet nor pysatochip exposes as a
+name; that file says which and why.
+
+| APDU | Defined in | As |
+| --- | --- | --- |
+| `SELECT` (`00 A4 04 00`) | neither applet: ISO 7816-4, dispatched by the JavaCard runtime | the AIDs are in each repository's build file: package `5361746F43686970` "SatoChip" and `536565644B6565706572` "SeedKeeper", each installed as an instance with a trailing `00`. `P1 = 04` selects by DF name and matches on a prefix, which is why pysatochip sends the shorter package AID and gets the instance. This card compares the whole 8 or 10 bytes; anything else is `ISO7816.SW_FILE_NOT_FOUND`, which is also what the SeedKeeper applet throws for a spurious select |
+| `GET DATA` (`80 CA`) | neither applet: GlobalPlatform, answered by the card manager | CPLC `9F 7F`, IIN `00 42`, CIN `00 45`. pysatochip sends it as a bare `ins = 0xCA  # GPSession.INS_GET_DATA` |
+| `GET STATUS` (`B0 3C`) | both | `INS_GET_STATUS`, handled by `GetStatus()`, which writes protocol major/minor, applet major/minor, four try counts, then 2FA / seeded / setup done / needs secure channel |
+| `SETUP` (`B0 2A`) | both | `INS_SETUP`, handled by `setup()` |
+| `VERIFY PIN` (`B0 42`) | both | `INS_VERIFY_PIN`, handled by `VerifyPIN()`, which throws `SW_PIN_FAILED + triesRemaining - 1`, the `63Cx` the wallet puts on screen |
+| `BIP32 GET AUTHENTIKEY` (`B0 73`) | both | `INS_BIP32_GET_AUTHENTIKEY`, handled by `getBIP32AuthentiKey()` |
+| `BIP32 IMPORT SEED` (`B0 6C`) | Satochip | `INS_BIP32_IMPORT_SEED`, handled by `importBIP32Seed()` |
+| `BIP32 RESET SEED` (`B0 77`) | Satochip | `INS_BIP32_RESET_SEED`, handled by `resetBIP32Seed()` |
+| `BIP32 GET EXTENDED KEY` (`B0 6D`) | Satochip, and the SeedKeeper too | `INS_BIP32_GET_EXTENDED_KEY`, handled by `getBIP32ExtendedKey()` in both trees. Only the Satochip half is simulated; see below |
+| `SEEDKEEPER GET STATUS` (`B0 A7`) | SeedKeeper | `INS_GET_SEEDKEEPER_STATUS`, handled by `GetSeedKeeperStatus()` |
+| `SEEDKEEPER IMPORT SECRET` (`B0 A1`) | SeedKeeper | `INS_IMPORT_SECRET`, handled by `importSecret()`. P1 is the transport, `SECRET_EXPORT_ALLOWED` (plain) or `SECRET_EXPORT_SECUREONLY` (encrypted); P2 steps `OP_INIT` / `OP_PROCESS` / `OP_FINALIZE` |
+| `SEEDKEEPER EXPORT SECRET` (`B0 A2`) | SeedKeeper | `INS_EXPORT_SECRET`, handled by `exportSecret()`, same P1 and P2 |
+| `SEEDKEEPER LIST HEADERS` (`B0 A6`) | SeedKeeper | `INS_LIST_SECRET_HEADERS`, handled by `listSecretHeaders()` |
+| `SEEDKEEPER RESET SECRET` (`B0 A5`) | SeedKeeper | `INS_RESET_SECRET`, handled by `resetSecret()` |
+
+### What those applets have and this one deliberately does not
+
+Everything here answers `6D00`, which is what the JavaCard runtime throws for an
+instruction an applet's own `switch` has no case for, so the wallet reports these
+as unsupported rather than being handed a comfortable lie. The list is from the
+two pinned trees, so it is what a real card of these versions would answer and
+this one will not.
+
+| Instruction | Applet | Why not here |
+| --- | --- | --- |
+| `SIGN TRANSACTION` (`6F`), `SIGN TRANSACTION HASH` (`7A`), `SIGN MESSAGE` (`6E`), `SIGN SHORT MESSAGE` (`72`), `PARSE TRANSACTION` (`71`) | Satochip | Card signing is not on the path this simulator exercises: the wallet signs with the seed it is holding, and no flow here sends these |
+| `BIP32 GET EXTENDED KEY` with option flags `0x02` or `0x04` | Satochip | `0x02` asks for the private key, which a Satochip does not export at all, and `0x04` is BIP85. Refused rather than quietly ignored, so the wallet cannot mistake silence for an answer |
+| `BIP32 GET EXTENDED KEY` (`6D`) on a **SeedKeeper** | SeedKeeper | The real v0.2 applet does answer it: given a secret id it derives from a masterseed it is already holding, so a card can hand out an xpub without the seed leaving it. This one does not, and it is the one row where the simulation is narrower than the applet rather than narrower than what the wallet asks for |
+| `IMPORT KEY` (`32`), `RESET KEY` (`33`), `GET PUBLIC FROM PRIVATE` (`35`), `BIP32 SET EXTENDED PUBKEY` (`74`), `SET AUTHENTIKEY PUBKEY` (`75`), `EXPORT AUTHENTIKEY` (`AD`) | Satochip (`AD` on both) | Reachable from no screen in this fork |
+| `CREATE PIN` (`40`), `CHANGE PIN` (`44`), `UNBLOCK PIN` (`46`), `LOGOUT ALL` (`60`), `LIST PINS` (`48`) | both | Card management, which is not one of the two flows this exists for. The PIN is set once at setup and checked, and that is all a card here has to be |
+| `SET 2FA KEY` (`79`), `RESET 2FA KEY` (`78`), `CRYPT TRANSACTION 2FA` (`76`), `GENERATE 2FA SECRET` (`AE`) | Satochip, `AE` SeedKeeper | 2FA is a second device approving what the card was asked to do, and there is no second device here |
+| `INIT SECURE CHANNEL` (`81`), `PROCESS SECURE CHANNEL` (`82`) | both | The secure channel encrypts every APDU with a session key negotiated over ECDH, to protect the wire between reader and card. There is no wire, and `GET STATUS` reports `needs_secure_channel = 0`, so pysatochip never wraps anything |
+| Encrypted import and export (P1 `SECRET_EXPORT_SECUREONLY`), `EXPORT SECRET TO SATOCHIP` (`A8`), `IMPORT ENCRYPTED SECRET` (`AC`), `IMPORT`/`EXPORT TRUSTED PUBKEY` (`AA`/`AB`) | SeedKeeper, `AC`/`AA`/`AB` Satochip | Moving a secret between cards without it appearing in the clear needs a session key negotiated with the other card's public key, and there is no second card to negotiate with. Refused rather than quietly done in plaintext |
+| `GENERATE MASTERSEED` (`A0`), `GENERATE RANDOM SECRET` (`A3`), `DERIVE MASTER PASSWORD` (`AF`) | SeedKeeper | On-card generation is only worth anything if the card's own RNG is. Every secret here arrives from the wallet, where the user can see where it came from |
+| `PRINT LOGS` (`A9`) | SeedKeeper | This card keeps no log, and says so rather than pretending: the log counters in `SEEDKEEPER GET STATUS` are zero and the last-log slot is empty |
+| `CARD LABEL` (`3D`), `SET NDEF` (`3F`), `SET NFC POLICY` (`3E`) | `3D` both, the other two SeedKeeper | Properties of a physical card, and of an NFC interface a browser tab does not have |
+| `IMPORT`/`EXPORT PKI CERTIFICATE` (`92`/`93`), `SIGN PKI CSR` (`94`), `EXPORT PKI PUBKEY` (`98`), `LOCK PKI` (`99`), `CHALLENGE RESPONSE PKI` (`9A`) | both | The manufacturer's certificate chain is how a client proves a card is a genuine Satochip. This one is not, and answering as though it were would be the most dangerous lie in the file |
+| `RESET TO FACTORY` (`FF`) | both | Reloading the page already is one: card state is in memory and nowhere else |
+
 ### The Satochip's seed
 
 A Satochip does not hand back what it was given: it answers with a key and a
@@ -373,14 +432,12 @@ connection is to a *card*, not to a reader: transmitting on a connection whose c
 has been pulled raises, rather than letting a flow run to completion against a card
 the user is holding in their hand.
 
-**Not implemented:** signing (`SIGN_TRANSACTION`, `SIGN_MESSAGE`), private-key and
-BIP85 export, PIN change and unblock, 2FA, card label and NDEF, factory reset, the
-SeedKeeper's encrypted import and export and its log, and the secure channel. All
-still `6D00`, so the wallet reports them as unsupported rather than being told a
-comfortable lie. Two need saying twice. The secure channel would encrypt every APDU
-with a session key negotiated over ECDH to protect the wire between reader and card;
-there is no wire here, and the card says so in `GET STATUS` so pysatochip never wraps
-anything. And a SeedKeeper's *encrypted* export is what moves a secret to a second
+**Not implemented:** *What those applets have and this one deliberately does not*,
+above, is the whole list, taken from the two pinned trees rather than from
+memory. Two of its rows need saying twice. The secure channel would encrypt every
+APDU with a session key negotiated over ECDH to protect the wire between reader and
+card; there is no wire here, and the card says so in `GET STATUS` so pysatochip never
+wraps anything. And a SeedKeeper's *encrypted* export is what moves a secret to a second
 card without it ever appearing in the clear; it needs a session key negotiated with
 that card's public key, and there is no second card here to negotiate with, so
 clone-to-another-card is refused rather than quietly done in plaintext.
