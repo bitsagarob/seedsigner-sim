@@ -18,6 +18,16 @@ document root, so there is no staging copy to keep in sync: edit a file in
 `src/web` and reload. The first two steps take a few minutes once and are cached
 afterwards; `docs/SELF-HOSTING.md` explains what ends up where.
 
+Then install the hooks, once per clone. Git does not clone them, so this is not
+automatic and nothing assumes it has been done:
+
+```sh
+git config core.hooksPath build/hooks
+```
+
+That is the whole install. See [The manifest](#the-manifest) for what it checks
+and why it will not fix anything for you.
+
 **The gotcha, before you lose an afternoon to it:** the page must be served with
 `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp`. Without them the document is not
@@ -99,6 +109,33 @@ is that the worker is permanently blocked inside SeedSigner's main loop, so it c
 never receive a `postMessage`, which is why keys, camera frames and the card tray
 all cross on shared memory, and why a change that "just posts a message to the
 worker" cannot work.
+
+## The manifest
+
+`build/checksums.txt` is the sha256 of every committed file that is served as it
+stands or packaged into a wallet zip: the page and its scripts, the icons, the
+shims, and the stand-in packages in `src/smartcard/` and `src/fakes/`. It is what
+makes "you can read all of it" a claim about a fixed set of bytes, and the build
+refuses to package a file that changed or that is listed nowhere.
+
+Change one of those files and the manifest has to move in the same commit:
+
+```sh
+./build/update-checksums.sh          # the one command that writes it
+git add build/checksums.txt
+```
+
+`./build/update-checksums.sh --check` answers whether it is already what that
+would write, and writes nothing itself. Neither does the build, and neither does
+the hook. That is deliberate: a build that refreshed the manifest would package a
+modified simulated card and report success, and the manifest exists precisely so
+that an unintended change stops somebody. Regenerating is a decision, and the
+diff is the record that somebody made it.
+
+The hook (`git config core.hooksPath build/hooks`) refuses a commit whose staged
+files and staged manifest disagree, and covers merge commits too. That is the
+mistake it was written for: one branch changed a file, another regenerated the
+manifest, each diff looked right, and the merge of the two did not.
 
 ## The rule that matters
 

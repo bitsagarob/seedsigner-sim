@@ -49,10 +49,23 @@ verified than committed.
 
 `fetch-assets.sh --check` re-verifies what is already on disk, and
 `sha256sum -c build/checksums.txt` covers everything that is committed and then
-served or packaged as it stands: jsQR, the page and its scripts, the three shims,
-and the stand-in packages in `src/smartcard/` and `src/fakes/` that the build
-copies into a wallet zip. Both scripts explain their trust chain in their own
-header comments; they are worth a read before you run them.
+served or packaged as it stands: jsQR, the page and its scripts, the icons, the
+three shims, and the stand-in packages in `src/smartcard/` and `src/fakes/` that
+the build copies into a wallet zip. Both scripts explain their trust chain in
+their own header comments; they are worth a read before you run them.
+
+That manifest is generated, by the one command that is allowed to write it:
+
+```sh
+./build/update-checksums.sh          # rewrite it, when a change to a listed file is deliberate
+./build/update-checksums.sh --check  # is it what it would be? writes nothing
+```
+
+Nothing else ever rewrites it. The build reads it and refuses to package a file
+that changed or that is listed nowhere; it does not refresh it, because a build
+that blessed whatever it found would package a modified simulated card and call
+it correct. `CONTRIBUTING.md` has the git hook that keeps a commit from splitting
+the two, which is worth installing if you are going to change files here.
 
 ## Running it locally
 
@@ -129,6 +142,9 @@ visitor is the question:
 ```
 
 - is every file in the table above being served, with this repository's bytes?
+  The list is worked out from `src/web`, `src/shims` and the firmwares `UPSTREAM`
+  publishes a zip hash for, not written down in the script, so a file you add is
+  checked without anyone remembering to add it there too.
 - do both served zips hash to what `UPSTREAM` publishes, which is what the
   page's technical details panel claims and what a rebuild is compared against?
 - does every URL the served pages and scripts name resolve? Including
