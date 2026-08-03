@@ -106,6 +106,51 @@ The shims sit next to the page rather than inside `wallet.zip` deliberately: it
 keeps the zip exactly what the build script produced, with the seams visibly
 outside it.
 
+## Checking the copy landed, on every box
+
+Copying files into a directory is easy to do halfway, and a half-done copy does
+not announce itself: the page still loads, and then reaches for something that
+is not there. Three breakages in one day, all that shape. The page was changed
+to fetch `wallet-<firmware>.zip` and only the page and the worker were copied,
+so the fetch landed on the site's 404 page and Pyodide reported "not a zip
+file". Files reached one box and not the other, twice. And a rename turned a URL
+a published article tells readers to `curl` into a 404, which matters more than
+it sounds: that command is the one thing that proves the served zip is the
+pinned build.
+
+`build/check-deploy.sh` asks the four questions those raise, over HTTPS, from
+inside each box rather than by reading its disk, because what nginx hands a
+visitor is the question:
+
+```sh
+./build/check-deploy.sh
+```
+
+- is every file in the table above being served, with this repository's bytes?
+- do both served zips hash to what `UPSTREAM` publishes, which is what the
+  page's technical details panel claims and what a rebuild is compared against?
+- does every URL the served pages and scripts name resolve? Including
+  `wallet-<firmware>.zip`, whose name the worker builds at runtime, so a rename
+  that outran a deploy shows up as a 404 here instead of as a mystery in a
+  console.
+- do the boxes agree with each other, byte for byte? Two boxes that disagree are
+  worse than either being wrong: then what a visitor gets depends on which one
+  answered.
+
+It prints PASS or FAIL per item and exits non-zero if anything failed. It only
+reports: it deploys nothing and writes nothing anywhere. `SIM_DEPLOY_URL` and
+`SIM_DEPLOY_BOXES` point it at your own deployment, a box being `NAME:local` for
+the machine you run it on and `NAME:ssh` for one reached with `ssh NAME`.
+
+Two things it does not do, both on purpose. `index.html` is fetched and its
+links are followed, but its bytes are not compared: a deployment that writes its
+own landing page is doing something reasonable, and a check that failed on that
+forever would be a check nobody reads. Everything the wallet itself loads *is*
+compared, because a customised one of those is not a re-skin, it is a different
+simulator. And `pyodide/` is not hashed file by file: it is 26 MB per box of
+somebody else's release, `fetch-assets.sh` already checks it where it is
+fetched, and a missing one fails the reference question anyway.
+
 ## nginx
 
 ```nginx
