@@ -29,6 +29,9 @@ KIND = os.environ.get("QR_KIND", "qr")
 Y4M = harness.artifact(f"{KIND}.y4m")
 SHOT = harness.artifact(f"scan-proof-{KIND}.png")
 PREVIEW_SHOT = harness.artifact(f"scan-preview-{KIND}.png")
+# The device's screen on its own, which is what run.py's same_seed step compares
+# across the three scans. The screenshot beside it is for looking at.
+SCREEN = harness.artifact(f"scan-screen-{KIND}.png")
 
 
 def main() -> int:
@@ -77,7 +80,9 @@ def main() -> int:
 
         page.wait_for_timeout(1500)
         page.screenshot(path=SHOT)
+        harness.save_screen(page, SCREEN)
         print(f"  screenshots: {PREVIEW_SHOT}\n               {SHOT}")
+        print(f"  screen:      {SCREEN}")
 
         log.dump("[cam]")
         browser.close()

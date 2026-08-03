@@ -107,32 +107,52 @@ def start_server():
 # and read down two different decoder paths, so if the wallet is honest all three
 # runs end on the same rendered fingerprint. Comparing the images turns a claim
 # somebody had to check by eye into something CI can fail on.
+#
+# What is compared is the device's own canvas -- the 320x240 SeedSigner's
+# renderer drew, read back out of it by the scan tests -- and not the page
+# screenshots sitting next to it in the same directory. A screenshot of the page
+# also holds the title, the amber warning box, the tray labels and the hint line,
+# every one of them drawn with the fonts the machine happens to have and not one
+# of them anything wallet.zip can influence. Comparing those went red on innocent
+# hosts: once on a font difference across the whole header, once on five pixels
+# differing by one channel value at an antialiased corner of the warning box,
+# while the device area was byte-identical both times. A check that fails for
+# reasons nobody caused is one people learn to skim past, and that is how a real
+# regression eventually gets waved through.
 BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "baseline", "seed-b2269592.png")
+                        "baseline", "screen-b2269592.png")
 
-SAME_SEED_SHOTS = ("scan-proof-qr.png", "scan-proof-qr-compact.png",
-                   "scan-proof-native-compact.png")
+SAME_SEED_SCREENS = ("scan-screen-qr.png", "scan-screen-qr-compact.png",
+                     "scan-screen-native-compact.png")
 
 
 def same_seed() -> int:
     print("\n=== same_seed " + "=" * 54, flush=True)
-    paths = [os.path.join(harness.ARTIFACT_DIR, n) for n in SAME_SEED_SHOTS]
-    missing = [n for n, p in zip(SAME_SEED_SHOTS, paths) if not os.path.exists(p)]
+    paths = [os.path.join(harness.ARTIFACT_DIR, n) for n in SAME_SEED_SCREENS]
+    missing = [n for n, p in zip(SAME_SEED_SCREENS, paths) if not os.path.exists(p)]
     if missing:
-        print(f"  FAIL no screenshot from {missing}")
+        print(f"  FAIL no captured screen from {missing}")
         return 1
     for other in paths[1:]:
         if not filecmp.cmp(paths[0], other, shallow=False):
             print(f"  FAIL {os.path.basename(other)} is a different screen from "
-                  f"{os.path.basename(paths[0])}")
+                  f"{os.path.basename(paths[0])}; the scan-proof-*.png "
+                  "screenshots beside them show what each run was displaying")
             return 1
 
     # Agreeing with each other is not enough. Three runs of a wallet that derived
     # the seed wrongly would agree perfectly and still be wrong, and the mnemonic
     # to seed path here runs on a substituted PBKDF2 (hashlib has no OpenSSL under
-    # Pyodide), so "all three match" has to be anchored to a known answer. The
-    # baseline is the BIP39 test vector "army van defense ...", whose master
-    # fingerprint is b2269592.
+    # Pyodide), so "all three match" has to be anchored to a known answer.
+    #
+    # That anchor is BASELINE, and moving the comparison to the canvas does not
+    # weaken it: the baseline is the same capture of the same screen, taken from
+    # a run whose decoded seed was checked, and it is 320x240 of the wallet's own
+    # output with nothing of the host in it. It is a picture rather than a digest
+    # so that the anchor can be audited by opening it: it is SeedFinalizeScreen
+    # reading "fingerprint b2269592", which is the BIP39 test vector "army van
+    # defense ..." and nothing else. Any of the three captures that differs from
+    # it by one pixel fails here.
     if not os.path.exists(BASELINE):
         print(f"  FAIL no baseline at {BASELINE}")
         return 1
@@ -193,7 +213,7 @@ def main(argv) -> int:
                     os.remove(path)
 
     # Only meaningful when every scan test ran and passed: comparing a fresh
-    # screenshot against a stale one would prove nothing.
+    # capture against a stale one would prove nothing.
     scans = ("scan_seedqr", "scan_compact", "scan_native")
     if all(results.get(name) == 0 for name in scans):
         results["same_seed"] = same_seed()

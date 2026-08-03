@@ -54,6 +54,14 @@ it yourself and compare the sha256 against the `wallet.zip` a page just served
 you. If they match, what you ran was the pinned upstream tree plus its pinned
 dependencies plus this repository's simulated smartcard package, and nothing else.
 
+[![reproducible-build](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml/badge.svg)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml)
+
+That rebuild also runs in CI, on every push, on a runner that has never seen this
+repository before and shares no cache with anything else — and it fails if either
+hash in [`UPSTREAM`](UPSTREAM) no longer comes back out. So the numbers you are
+being asked to compare against are re-derived by a machine rather than by
+whoever last remembered to.
+
 A released tag rather than a branch tip, for two reasons: a tip can be rebased out
 from under the pin, leaving a sha nobody can fetch any more, and that tag is the
 one the official pi0-smartcard device image is built from — so the code here and

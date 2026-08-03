@@ -105,11 +105,37 @@ inventing keys, which is the worst thing a bitcoin-adjacent tool can do. The
 second phase then holds up a real CompactSeedQR and requires the correct seed
 anyway, because jsQR re-reads the frame for its actual bytes.
 
-**`run.py`'s `same_seed` step** — after the scan tests, the three proof
-screenshots are compared byte for byte. One seed, encoded three ways and read
-down two different decoder paths, must end on one rendered fingerprint. It has
-been identical across every run so far, including runs against differently built
-`wallet.zip` files, so a difference means something real changed.
+**`run.py`'s `same_seed` step** — after the scan tests, the screen each of the
+three runs ended on is compared byte for byte with the other two, and then with a
+committed baseline. One seed, encoded three ways and read down two different
+decoder paths, must end on one rendered fingerprint. It has been identical across
+every run so far, including runs against differently built `wallet.zip` files, so
+a difference means something real changed.
+
+What is compared is `scan-screen-*.png`: the 320x240 canvas SeedSigner's own
+renderer drew, read back out of the canvas rather than photographed. The
+whole-page `scan-proof-*.png` screenshots are still written and are the thing to
+look at when this fails, but they are not what is asserted on. A page screenshot
+also holds the title, the amber warning box, the tray labels and the hint line,
+all drawn with whatever fonts the machine has and none of them anything
+`wallet.zip` can influence, so comparing those went red on hosts where nothing
+was wrong: once on a font difference across the whole header, once on five pixels
+differing by one channel value at an antialiased corner of the warning box while
+the device area was byte-identical.
+
+Agreeing with each other is not enough — three runs of a wallet that derived the
+seed wrongly would agree perfectly. `baseline/screen-b2269592.png` is the anchor:
+the same capture, of `SeedFinalizeScreen` showing the BIP39 test vector's master
+fingerprint `b2269592`. It is committed as a picture rather than as a digest so
+that the anchor can be audited by opening it. Regenerate it only when the wallet
+is meant to draw something different, or when the Chromium that encodes the PNG
+changes underneath it:
+
+    python3 test/run.py scan
+    cp test/artifacts/scan-screen-qr.png test/baseline/screen-b2269592.png
+
+and look at the file before committing it. A baseline nobody read anchors
+nothing.
 
 **`test_cards_browser.py`** — the same card story as `test_cards.py`, but through
 `wallet.html` and the real tray: an empty reader ends in a warning rather than a

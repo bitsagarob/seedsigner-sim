@@ -1,0 +1,126 @@
+# Rebuilds wallet.zip on a clean runner and fails if it is not the file UPSTREAM
+# says it is.
+#
+# The most interesting claim this repository makes is that wallet.zip is the
+# pinned upstream SeedSigner tree plus its pinned dependencies and nothing else,
+# and that anyone can rebuild it and get the same bytes. UPSTREAM publishes both
+# hashes for exactly that comparison. Until now nothing enforced them: they were
+# checked when somebody remembered, and they had already drifted once before
+# anybody noticed. A published hash nobody re-derives is a claim, not a check.
+#
+# Its own workflow rather than a job in test.yml, for three reasons. It answers a
+# different question -- "is the build still what UPSTREAM says it is" rather than
+# "do the tests pass" -- so it should go red on its own and say so in its own
+# name. It must not touch test.yml's build cache, because a rebuild that starts
+# from something an earlier run left behind proves nothing about a fresh clone.
+# And a badge points at a workflow, so the thing a reader is asked to trust needs
+# to be a workflow rather than one step inside a longer one.
+name: reproducible-build
+
+on:
+  # Pushes only on the default branch, and every pull request. A
+  # contributor's branch is tested when they open the PR, rather than
+  # twice for every push once they have.
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    # Cloning upstream and fourteen dependencies and writing the zip. Minutes,
+    # but nothing here boots a browser.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # build-wallet-zip.sh never reads build/checksums.txt -- nothing it packs
+      # is listed there -- so the manifest of committed third-party files is not
+      # covered by anything else in this job. fetch-assets.sh would check it, but
+      # only after downloading 26MB of Pyodide this job has no use for, and
+      # test.yml skips that script entirely whenever its cache hits, which is
+      # every run that did not change a pin. So the guard belongs here, first,
+      # where it costs a second and cannot be cached past.
+      - name: Check the committed third-party files
+        run: sha256sum -c build/checksums.txt
+
+      # No actions/cache in this job, deliberately, and --no-cache so the script
+      # does not reuse a PyPI artifact from the runner's home directory either.
+      # Every byte that goes into the zip is fetched and hash-checked in this
+      # run, which is the only thing that says anything about a fresh clone.
+      - name: Rebuild wallet.zip from the pin
+        run: ./build/build-wallet-zip.sh --no-cache
+
+      - name: Compare against the hashes published in UPSTREAM
+        run: |
+          set -euo pipefail
+
+          # Read out of UPSTREAM rather than written down here: one place to
+          # look, one place to change, and a copy in a workflow would be one more
+          # number able to drift. Same awk idiom the build script reads the pin
+          # with.
+          expected_zip="$(awk -F= '/^[[:space:]]*wallet_zip_sha256[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
+          expected_contents="$(awk -F= '/^[[:space:]]*wallet_zip_contents_sha256[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }' UPSTREAM)"
+          [ -n "${expected_zip}" ]      || { echo "no wallet_zip_sha256 in UPSTREAM" >&2; exit 1; }
+          [ -n "${expected_contents}" ] || { echo "no wallet_zip_contents_sha256 in UPSTREAM" >&2; exit 1; }
+
+          actual_zip="$(sha256sum build/out/wallet.zip | cut -d' ' -f1)"
+          # wallet.zip.manifest is the (sha256, path) listing the build writes
+          # beside the zip, so its own sha256 is the contents hash the script
+          # printed a moment ago.
+          actual_contents="$(sha256sum build/out/wallet.zip.manifest | cut -d' ' -f1)"
+
+          # Printed whether this passes or fails: someone comparing a download
+          # against this run should not have to make it fail to see the numbers.
+          echo "zip       sha256 ${actual_zip}"
+          echo "contents  sha256 ${actual_contents}"
+
+          if [ "${actual_zip}" = "${expected_zip}" ] && \
+             [ "${actual_contents}" = "${expected_contents}" ]; then
+            echo "both match UPSTREAM: a clean rebuild of the pin is byte for byte the published wallet.zip"
+            exit 0
+          fi
+
+          echo >&2
+          echo "this build does not reproduce the hashes published in UPSTREAM" >&2
+          echo >&2
+          echo "  zip       expected ${expected_zip}" >&2
+          echo "            actual   ${actual_zip}" >&2
+          echo "  contents  expected ${expected_contents}" >&2
+          echo "            actual   ${actual_contents}" >&2
+          echo >&2
+
+          # The two hashes together say which kind of difference this is, which
+          # is the distinction the README draws and the first thing anybody
+          # reading a red build needs.
+          if [ "${actual_contents}" = "${expected_contents}" ]; then
+            echo "The contents hash matches, so the two builds hold identical files and" >&2
+            echo "differ only in compression -- some distributions ship zlib-ng, whose" >&2
+            echo "deflate output is not byte-identical to stock zlib. That is a packaging" >&2
+            echo "difference, not a code difference." >&2
+          else
+            echo "The contents hash differs too, so the files themselves are not the same:" >&2
+            echo "this is a code difference, not a packaging one. The uploaded" >&2
+            echo "wallet.zip.manifest lists a sha256 per file; diff it against the manifest" >&2
+            echo "from a build that matched to find out which files moved." >&2
+          fi
+          exit 1
+
+      # Only useful when the comparison above went red, and then it is the whole
+      # of the investigation: which file differs, rather than that one does.
+      - name: Upload the per-file manifest
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wallet-zip-manifest
+          path: build/out/wallet.zip.manifest
+          if-no-files-found: ignore
+          retention-days: 14

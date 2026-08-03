@@ -13,6 +13,7 @@ always adds it. Without it every test in this suite would sit and time out
 against a wallet that is working perfectly.
 """
 
+import base64
 import os
 import re
 import time
@@ -67,6 +68,24 @@ def artifact(name):
     """Absolute path to a generated file, with the directory made on demand."""
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
     return os.path.join(ARTIFACT_DIR, name)
+
+
+def save_screen(page, path):
+    """Write the device's screen, at the 320x240 the wallet drew it.
+
+    Not a screenshot. A screenshot of the page also holds the title, the warning
+    box, the card tray and the hint line, all of them rendered with whatever
+    fonts the machine has and none of them anything the wallet can influence; a
+    screenshot of the canvas element holds whatever CSS scaled it to, and those
+    scaled edge pixels move by one when anything else on the page changes
+    height. Reading the canvas's own pixels instead gets exactly the bytes
+    SeedSigner's renderer put there and nothing else, which is the same reason
+    test_cards_seedkeeper.py digests the canvas rather than an image of it.
+    """
+    data_url = page.evaluate(
+        "() => document.getElementById('screen').toDataURL('image/png')")
+    with open(path, "wb") as handle:
+        handle.write(base64.b64decode(data_url.split(",", 1)[1]))
 
 
 # --- checks ------------------------------------------------------------------
