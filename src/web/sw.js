@@ -33,7 +33,6 @@ const SHELL = [
   "./browser_camera.py",
   "./browser_qr.py",
   "./browser_display.py",
-  "./session.py",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
