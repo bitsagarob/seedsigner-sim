@@ -207,9 +207,16 @@ def main() -> int:
         page.set_viewport_size(PHONE_SIDEWAYS)
         page.wait_for_timeout(400)
         device = page.locator("#device").bounding_box()
-        check("turned sideways it is upright and fills the height",
-              device["height"] >= PHONE_SIDEWAYS["height"] - 2
-              and device["width"] <= PHONE_SIDEWAYS["width"] + 1,
+        # Upright, and fitted: it fills whichever axis runs out first and
+        # overflows neither. Which axis that is belongs to the shell's own
+        # proportions rather than to this test -- 780x360 was height bound while
+        # the drawn shell was about twice as wide as it was tall, and is width
+        # bound now the art matches the hardware and is a little longer.
+        check("turned sideways it is upright and fitted to the viewport",
+              device["width"] <= PHONE_SIDEWAYS["width"] + 1
+              and device["height"] <= PHONE_SIDEWAYS["height"] + 1
+              and (device["height"] >= PHONE_SIDEWAYS["height"] - 2
+                   or device["width"] >= PHONE_SIDEWAYS["width"] - 2),
               f"{int(device['width'])}x{int(device['height'])} in "
               f"{PHONE_SIDEWAYS['width']}x{PHONE_SIDEWAYS['height']}")
         check("and the keys are the same thumb sized keys", key_size() >= 44,

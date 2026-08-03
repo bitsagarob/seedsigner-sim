@@ -65,8 +65,15 @@ def indicator(page):
     The loud half is a class on the body rather than on the indicator, because
     mainnet changes more than one thing: the warning gets heavier and the
     invitation to our own test network is taken away.
+
+    The label itself is one word in the corner of the shell, and CSS sets it in
+    capitals; the whole phrase lives on its title, which is what is compared
+    here so the assertion reads like the sentence a visitor would say. Both come
+    off the same event from the wallet, so neither can be right on its own.
     """
-    return (page.locator("#network").inner_text(),
+    label = page.locator("#network")
+    assert label.inner_text().strip().lower() in label.get_attribute("title").lower()
+    return (label.get_attribute("title"),
             page.evaluate("document.body.classList.contains('mainnet')"))
 
 

@@ -30,18 +30,77 @@
      to the same column and centred in it, and the device alone keeps the wider
      bound below. 46rem because that is what the details panel and the tutorial
      panel are already, so the column has one edge rather than three. */
-  h1, #status, .hint, .warn, .note, #running, #build {
+  h1, #status, .hint, .warn, .note, .running-row {
     max-width: min(46rem, 100%);
   }
   h1, #status, .hint { text-align: center; }
   #device { width: 100%; }
+  /* The stage: the device, and the tutorial that drives it, and nothing else.
+     Everything the page says about itself is below them in the footer, because
+     a paragraph between the two is a paragraph in the way. */
+  #stage {
+    position: relative; width: 100%; max-width: min(68rem, 100%);
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  }
+  #stage-device {
+    position: relative; width: 100%;
+    display: flex; flex-direction: column; align-items: center; gap: .5rem;
+    /* A band for the network label to sit in. On a phone the shell fills the
+       width and the corner it leaves empty on a desktop is barely a corner, so
+       the label is given its own line rather than dropped on top of the art. */
+    padding-top: 1.15em;
+  }
+  #tutorial-slot { width: 100%; min-width: 0; }
+  /* Driving the tutorial is reading a step and watching the device answer it,
+     so the two have to be in view at once. Given the width they go side by side
+     and the device is pinned while the steps scroll past it; without the width
+     they stack, and the device is pinned to the top of the viewport instead.
+     Either way the screen stays where the words can be read against it, which
+     is the whole point and what the single scrolling column never managed. */
+  body.tutoring #stage { max-width: min(94rem, 100%); }
+  @media (min-width: 62rem) {
+    /* Centred against the steps beside it, not hung off the top of them: the
+       device is the shorter of the two columns and a shell pinned to the top of
+       a tall panel reads as an afterthought next to it. */
+    body.tutoring #stage {
+      flex-direction: row; align-items: center; gap: 1.25rem;
+    }
+    /* min-width:0, or the column will not shrink below the device's own natural
+       width -- which is about 1500px -- and squeezes the tutorial to nothing. */
+    body.tutoring #stage-device {
+      flex: 1 1 36rem; min-width: 0; width: auto; position: sticky; top: 1rem;
+    }
+    body.tutoring #tutorial-slot { flex: 1 1 26rem; width: auto; }
+  }
+  @media (max-width: 61.99rem) {
+    body.tutoring #stage-device {
+      position: sticky; top: 0; z-index: 20; padding-bottom: .4rem;
+      /* Opaque, or the steps scroll through the shell on their way past. */
+      background: #0b0c0e;
+    }
+  }
+  /* Which network the wallet is on: a fact worth having up, not a sentence
+     worth reading, so it is one small word in the corner rather than a line of
+     its own under the device. Mainnet is the exception and shouts, below. */
+  #network {
+    position: absolute; top: 0; right: 0; z-index: 4; margin: 0;
+    font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
+    color: #656c76;
+  }
+  footer {
+    display: flex; flex-direction: column; align-items: center; gap: .8rem;
+    width: 100%; margin-top: 1rem;
+  }
   #screen {
     display: block; width: 100%; height: 100%;
     image-rendering: pixelated; background: #000;
   }
   #status { color: #7c848f; min-height: 0; }
   #status:empty { display: none; }
-  header { display: flex; align-items: center; gap: .5rem; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: center; gap: .5rem;
+  }
   h1 { font-size: 1.6rem; margin: 0; font-weight: 600; }
   #about > summary {
     list-style: none; cursor: pointer; width: 1.35rem; height: 1.35rem;
@@ -76,18 +135,13 @@
   .note { color: #9aa3ae; font-size: .9em; text-align: center; margin: 0; }
   .note a { color: #f7931a; }
   .hint a { color: #7c848f; }
-  /* Which firmware and which network, under the device: the two things about
-     what is running that are a control or that change while you watch. What
-     they are, in words, is said in the details panel above. */
-  #running {
-    display: flex; flex-direction: column; align-items: center; gap: .5rem;
-    font-size: .9em;
-  }
-  #running p { margin: 0; color: #9aa3ae; text-align: center; }
+  /* The footer row: the firmware control, and how to drive the thing. What is
+     running, in words, is said in the details panel beside them. */
   .running-row {
     display: flex; flex-wrap: wrap; align-items: center;
-    justify-content: center; gap: .5rem .9rem;
+    justify-content: center; gap: .5rem .9rem; font-size: .9em;
   }
+  .running-row .hint { margin: 0; font-size: 1em; }
   /* The firmware control, in the card tray's idiom: a plain two-way switch and
      nothing shaped like a card or a slot, because this page says microSD is not
      emulated and a slot to push something into would promise otherwise. */
@@ -102,27 +156,38 @@
     color: #f7931a; border-color: #f7931a; background: #16181c; cursor: default;
   }
   #firmware-switch button:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
-  /* The details panel, above the device with the warning, so that what the page
-     claims about itself is offered before the thing it is about. Same idiom as
-     the firmware switch and the card tray: dark fill, thin border, and Bitcoin
-     orange only where something is on or has come out right. */
-  #build { width: 100%; text-align: center; font-size: .9em; }
+  /* The details panel, beside the title with the i and in the same small idiom:
+     both are the page talking about itself, and neither is worth a strip across
+     the page while it is shut. Dark fill, thin border, and Bitcoin orange only
+     where something is on or has come out right, as everywhere else here. */
+  #build { font-size: .78rem; }
   #build > summary {
-    list-style: none; display: inline-block; cursor: pointer;
+    list-style: none; display: inline-block; cursor: pointer; white-space: nowrap;
     font: inherit; color: #8b939e; background: #1d2026; border: 1px solid #2a2e35;
-    border-radius: 5px; padding: .2rem .6rem;
+    border-radius: 5px; padding: .1rem .45rem;
   }
   #build > summary::-webkit-details-marker { display: none; }
   #build > summary:hover { color: #d7dbe0; border-color: #3a3f47; }
   #build[open] > summary { color: #f7931a; border-color: #f7931a; background: #16181c; }
   #build > summary:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
   #build > div {
-    /* Border box, because the padding below is a fifth of a phone's width and
-       a content-box panel would push the page sideways. */
-    box-sizing: border-box; width: min(46rem, 100%);
-    margin: .6rem auto 0; text-align: left;
+    /* Out of the flow like the i panel next to it, or opening it would push the
+       device down the page. Border box, because the padding below is a fifth of
+       a phone's width and a content-box panel would push the page sideways. */
+    position: absolute; left: 50%; transform: translateX(-50%); z-index: 10;
+    box-sizing: border-box; width: min(46rem, calc(100vw - 2rem));
+    margin-top: .5rem; text-align: left; font-size: 1.15em;
     background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
     padding: 1rem 1.25rem; color: #b6bec8;
+  }
+  /* Both header panels hang over the page rather than pushing it down, so both
+     are bounded and scroll themselves. Unbounded, this one is long enough to
+     cover the device and the controls under it and swallow every click that
+     lands on them, which is exactly what it did the first time it was moved up
+     here. The script below closes them on a click outside or on Escape. */
+  #about > div, #build > div {
+    max-height: min(70vh, 42rem); overflow: auto; overscroll-behavior: contain;
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, .55);
   }
   #build a { color: #f7931a; }
   /* What is running, in a sentence, at the top of the panel where the rest of
@@ -207,6 +272,13 @@
     #fullscreen { display: inline-block; }
   }
   body.solo { overflow: hidden; }
+  /* Filling the screen outranks pinning the device to the top of a scrolling
+     page: the sticky wrapper's z-index would otherwise be a stacking context
+     the fixed device could not climb out of, and the shell would come up behind
+     the backdrop rather than on it. */
+  body.solo #stage-device {
+    position: static; z-index: auto; background: none;
+  }
   body.solo::before { content: ""; position: fixed; inset: 0; z-index: 49; background: #0b0c0e; }
   body.solo #device {
     position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 50;
@@ -278,31 +350,15 @@
         <p>Source, and a build script that rebuilds this wallet from a pinned
         upstream commit so you can check the claim above yourself:
         <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">seedsigner-sim</a>.
-        <strong>Technical details</strong>, above the device, has the pin, both
+        <strong>Technical details</strong>, beside this, has the pin, both
         published hashes and everything the wallet zip carries.
         The device firmware lives in
         <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">seedsigner-os</a>.</p>
       </div>
     </details>
-  </header>
-  <!-- Between the title and the device, so it is the first thing read and then
-       scrolls out of the way, rather than competing with the device for room
-       underneath it.
-
-       The short half is always up. A real seed typed while the device is on
-       Testnet is the same seed, and its mainnet keys are compromised the moment
-       it is entered, so the sentence that says not to type one is not a mainnet
-       sentence. What mainnet adds is the rest: this page then holds the correct
-       mainnet keys, and there is no secure element under them. -->
-  <p class="warn" id="warning"><strong>Simulator.</strong> Never enter a seed
-  phrase you rely on; use a public test seed, a throwaway phrase that holds no
-  bitcoin and never will.<span class="mainnet-only" id="warning-mainnet"> This is
-  not a wallet and has no secure element, and on Mainnet it holds the real
-  mainnet keys for whatever you give it: treat anything typed into it as
-  public.</span></p>
   <!-- Everything the page can say about what it is running, and the one check it
-       can make about itself. Above the device with the warning, because both are
-       about the thing rather than part of it, and closed until it is asked for.
+       can make about itself. Closed until it is asked for, and down here rather
+       than above the device: it is about the thing rather than part of it.
        Filled in from wallet-<firmware>.build-info.json, which the build writes
        beside the zip from the pins it built from, except the received hash,
        which comes from the worker. -->
@@ -346,30 +402,51 @@
       <a href="https://github.com/bitsagarob/seedsigner-sim/releases/latest" rel="noopener">latest release</a></p>
     </div>
   </details>
-  <div id="device"></div>
-  <canvas id="screen" width="320" height="240"></canvas>
-  <!-- Only offered where it is any use: on a phone, where the page around the
-       device is what is making the device small. -->
-  <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
-  <div id="running">
-    <div class="running-row">
-      <div id="firmware-switch" role="group" aria-label="Firmware">
-        <span class="label">Firmware</span>
-      </div>
+  </header>
+  <!-- The short half is always up. A real seed typed while the device is on
+       Testnet is the same seed, and its mainnet keys are compromised the moment
+       it is entered, so the sentence that says not to type one is not a mainnet
+       sentence. What mainnet adds is the rest: this page then holds the correct
+       mainnet keys, and there is no secure element under them. One line either
+       way; the long form of both is behind the i at the top. -->
+  <p class="warn" id="warning"><strong>Simulator.</strong> Never enter a seed
+  phrase you rely on; use a throwaway test seed.<span class="mainnet-only"
+  id="warning-mainnet"> On Mainnet this page holds the real mainnet keys for
+  whatever you give it, with no secure element under them: treat anything typed
+  in as public.</span></p>
+  <!-- The device, and the tutorial that drives it, and nothing between them.
+       Everything else the page has to say sits in the footer under both: the
+       warning, the switch, what is running and what it is. Earlier this page put
+       four paragraphs and a details panel between the shell and the tutorial
+       panel, which meant the one thing the tutorial is for -- read the step,
+       watch the device do it -- needed a scroll each way. -->
+  <div id="stage">
+    <div id="stage-device">
+      <div id="device"></div>
+      <canvas id="screen" width="320" height="240"></canvas>
       <p id="network"></p>
+      <p id="status">starting…</p>
+      <!-- Only offered where it is any use: on a phone, where the page around the
+           device is what is making the device small. -->
+      <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
     </div>
+    <!-- Either one button, or, once it has been pressed, the tutorial itself.
+         Nothing else is added to the page at rest. -->
+    <div id="tutorial-slot"></div>
   </div>
-  <p id="status">starting…</p>
+  <div id="cardtray"></div>
+  <footer>
+  <div class="running-row">
+    <div id="firmware-switch" role="group" aria-label="Firmware">
+      <span class="label">Firmware</span>
+    </div>
+    <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>
+  </div>
   <p class="note">This is a simulator, and it starts on Testnet, so you can use it
   with <a href="/signet">Bitsaga Signet</a>, our own test network. These are not real
   bitcoin. They exist only on our test network, cannot be sold or sent to anyone, and
   are worth nothing.</p>
-  <!-- Either one button, or, once it has been pressed, the tutorial itself.
-       Nothing else is added to the page at rest. -->
-  <div id="tutorial-slot"></div>
-  <div id="cardtray"></div>
-  <p class="hint"><a id="debuglink" href="?debug=1">debug</a></p>
-  <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>
+  </footer>
 
 <script src="seedsigner-device.js"></script>
 <script src="wallet-camera.js"></script>
@@ -403,8 +480,19 @@ const FIRMWARE = FIRMWARES.includes(asked) ? asked : FIRMWARES[0];
 // is why the button on the resting page reloads into ?tutorial=1 rather than
 // starting on top of whatever state the page is already in. Smartcard fork
 // only: the whole flow is about SeedKeeper cards, and stock has none.
-const TUTORIAL = new URLSearchParams(location.search).has("tutorial")
-              && FIRMWARE === "smartcard";
+//
+// Behind the URL either way. The page at rest is a SeedSigner and nothing else,
+// which is the thing worth handing to a stranger; the tutorial is a guided demo
+// of one particular ceremony and turns the page into a lesson, so it is offered
+// to people given a link to it and to nobody else. ?tutorial=offer is the
+// button that used to sit on every visit, ?tutorial=1 starts the thing.
+const TUTORIAL_ASKED = new URLSearchParams(location.search).get("tutorial");
+const TUTORIAL_OFFERED = TUTORIAL_ASKED !== null && FIRMWARE === "smartcard";
+const TUTORIAL = TUTORIAL_OFFERED && TUTORIAL_ASKED !== "offer";
+// Set here rather than when the tutorial mounts, which is after the wallet has
+// started: the layout has to be its final shape while the page is still
+// loading, or the device jumps across the screen a minute in.
+document.body.classList.toggle("tutoring", TUTORIAL);
 
 // How the page names each firmware, on the switch and in the sentence inside
 // the details panel. The switch carries the name each build calls itself --
@@ -434,6 +522,19 @@ const deviceEl = document.getElementById("device");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const networkEl = document.getElementById("network");
+
+// The two header panels are popovers: they cover the page rather than pushing
+// it down, so anything they cover is unclickable while they are open, and a
+// visitor who has finished reading one should not have to find the same small
+// chip again to get their device back. Click anywhere outside, or Escape.
+for (const panel of document.querySelectorAll("header > details")) {
+  document.addEventListener("pointerdown", (event) => {
+    if (panel.open && !panel.contains(event.target)) panel.open = false;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (panel.open && event.key === "Escape") panel.open = false;
+  });
+}
 
 // Say which firmware this is, in words, in the details panel.
 document.getElementById("firmware-line").textContent = FIRMWARE_INFO[FIRMWARE].says;
@@ -676,7 +777,11 @@ if (!window.crossOriginIsolated) {
       // The wallet's own settings, read back out of them by the worker. The
       // page holds no copy and computes nothing: it repeats what it was told,
       // and says nothing at all until it has been told something.
-      networkEl.textContent = "Bitcoin network: " + event.data.name;
+      // The name alone: it is a corner label, and "Bitcoin network" is what a
+      // label in the corner of a bitcoin signing device is understood to be.
+      // The full phrase stays on the element for anyone who hovers or listens.
+      networkEl.textContent = event.data.name;
+      networkEl.title = "Bitcoin network: " + event.data.name;
       document.body.classList.toggle("mainnet", event.data.mainnet);
     } else if (type === "error") {
       statusEl.textContent = "failed: " + event.data.message;
@@ -697,7 +802,7 @@ if (!window.crossOriginIsolated) {
     tutorial = WalletTutorial.mount({
       container: slot, sendKey, keymap: KEYMAP, tray, screen: canvas,
     });
-  } else if (FIRMWARE === "smartcard") {
+  } else if (TUTORIAL_OFFERED) {
     WalletTutorial.offer(slot);
   }
 

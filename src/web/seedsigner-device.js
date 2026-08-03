@@ -53,7 +53,8 @@
     ".ssd-ctl{pointer-events:none}",
     ".ssd-ctl .ssd-hover,.ssd-ctl .ssd-press{opacity:0}",
     // Only a live device reacts; the decorative build stays inert illustration.
-    ".ssd-live .ssd-ctl{pointer-events:auto;cursor:pointer;transition:transform .07s ease-out}",
+    ".ssd-live .ssd-ctl{pointer-events:auto;cursor:pointer}",
+    ".ssd-live .ssd-cap{transition:transform .07s ease-out}",
     ".ssd-live .ssd-ctl .ssd-hover{transition:opacity .13s ease}",
     // Hover only where there is a pointer that can hover. A touch that lands on
     // a key would otherwise leave it lit until something else was touched.
@@ -62,7 +63,9 @@
     // whatever the browser feels like: Safari does not apply it at all without a
     // touch handler, and every engine drops it the moment a finger drifts. The
     // class goes on when the key is pressed and stays long enough to be seen.
-    ".ssd-live .ssd-ctl.ssd-down{transform:translateY(var(--ssd-sink,2px))}",
+    // The cap sinks, not the whole key: it goes down into its own side wall, so
+    // the wall shortens under a press the way a real one does.
+    ".ssd-live .ssd-ctl.ssd-down .ssd-cap{transform:translateY(var(--ssd-sink,2px))}",
     ".ssd-live .ssd-ctl.ssd-down .ssd-press{opacity:.42}",
     ".ssd-live .ssd-ctl.ssd-down .ssd-hover{opacity:.1}",
     ".ssd-live .ssd-ctl.ssd-down .ssd-shadow{opacity:.12}",
@@ -171,6 +174,15 @@
       ' d="' + shape + '" fill="' + fill + '"' + grown + "/>";
   }
 
+  /*
+   * Every number below is off a square-on photograph of the hardware, divided
+   * through by the height of the glass so it lands in design units. They are
+   * asymmetric because the device is: the LCD module sits high and left in its
+   * well, and both key clusters sit far closer to the screen than to the end
+   * caps, which is what leaves the big empty semicircles the shell is known for.
+   * Centring either cluster in its gutter is the single thing that made earlier
+   * passes read as a games console rather than as this device.
+   */
   function layout(screenW, screenH, scale, withCard) {
     var sw = Math.round(screenW * scale);
     var sh = Math.round(screenH * scale);
@@ -178,16 +190,20 @@
     var L = { u: u, sw: sw, sh: sh };
 
     L.edge = 12 * u;                     // chamfer band around the shell
-    L.recess = 10 * u;                   // dark well the LCD frame sits in
-    L.bezel = 3 * u;                    // pale frame between well and glass
-    // The real screen is square; this port renders 320x240, so the aperture has
-    // to be 4:3. Widening the gutters keeps the shell from reading as all screen.
-    L.padGut = 480 * u;                  // shell left edge -> well
-    L.keyGut = 280 * u;                  // well -> shell right edge
-    L.rail = 58 * u;                     // well -> shell top and bottom
+    // Glass -> dark well. Wider right and below because the module is not centred.
+    L.well = { l: 18 * u, t: 19 * u, r: 45 * u, b: 29 * u };
+    // Glass -> the module's own pale frame, the light band that shows along the
+    // bottom of the screen and down its right side on the real thing.
+    L.frame = { l: 1 * u, t: 1 * u, r: 23 * u, b: 21 * u };
+    // Well -> shell edge. The port renders 4:3 where the hardware glass is a
+    // little squarer, so the two big gutters carry the 15u of slack that leaves.
+    L.padGut = 474 * u;                  // shell left edge -> well
+    L.keyGut = 289 * u;                  // well -> shell right edge
+    L.railT = 29 * u;
+    L.railB = 26 * u;
 
-    L.bodyW = L.padGut + L.recess * 2 + sw + L.keyGut;
-    L.bodyH = L.rail * 2 + L.recess * 2 + sh;
+    L.bodyW = L.padGut + L.well.l + sw + L.well.r + L.keyGut;
+    L.bodyH = L.railT + L.well.t + sh + L.well.b + L.railB;
     L.radius = L.bodyH / 2;              // a true stadium, not a rounded rect
 
     // The card standing out of the front edge sets the bottom padding, so an
@@ -206,12 +222,20 @@
     L.viewW = L.bodyW + L.padX * 2;
     L.viewH = L.bodyH + L.padT + L.padB;
 
-    L.screenX = L.bodyX + L.padGut + L.recess;
-    L.screenY = L.bodyY + L.rail + L.recess;
+    L.screenX = L.bodyX + L.padGut + L.well.l;
+    L.screenY = L.bodyY + L.railT + L.well.t;
+    L.cx = L.bodyX + L.bodyW / 2;
     L.cy = L.bodyY + L.bodyH / 2;
 
-    L.padCx = L.bodyX + L.padGut / 2;                  // D-pad centre
-    L.keyCx = L.bodyX + L.bodyW - L.keyGut / 2;        // 1/2/3 column centre
+    // Measured from the shell edges rather than centred in their gutters: both
+    // clusters sit well inboard, tucked against the screen.
+    L.padCx = L.bodyX + 268 * u;                       // D-pad centre
+    L.keyCx = L.bodyX + L.bodyW - 182 * u;             // 1/2/3 column centre
+
+    // How far a cap's top face is seen displaced from its own base at the far
+    // edge of the shell. Scales with the shell, so the effect is the same
+    // photograph at any rendered size.
+    L.lift = 5.5 * u;
 
     L.cardX = L.bodyX + L.bodyW * 0.53 - L.cardW / 2;
     L.cardY = L.bodyY + L.bodyH - L.cardBite;
@@ -228,10 +252,10 @@
       // Shell top face: key light upper-left, falling away to the lower right.
       // Flatter than a glossy consumer shell: the real one is a matte grey.
       '<linearGradient id="', id, '-body" ', space, bodyBox, ">",
-      '<stop offset="0" stop-color="#494c50"/>',
-      '<stop offset=".38" stop-color="#34363a"/>',
-      '<stop offset=".78" stop-color="#26282b"/>',
-      '<stop offset="1" stop-color="#1f2123"/>',
+      '<stop offset="0" stop-color="#55585c"/>',
+      '<stop offset=".40" stop-color="#45484c"/>',
+      '<stop offset=".75" stop-color="#383b3f"/>',
+      '<stop offset="1" stop-color="#2e3134"/>',
       "</linearGradient>",
       // A chamfer facet is lit by its own orientation, not by where it sits, so
       // the bevel is shaded per edge: these run across the whole ring and
@@ -277,11 +301,14 @@
       '<stop offset=".72" stop-color="#3c424b"/>',
       '<stop offset="1" stop-color="#59606b"/>',
       "</linearGradient>",
-      // The pale LCD frame: a warm light grey, graded by where it sits in the scene.
+      // The LCD module's own frame, which on the hardware is a pale grey band
+      // showing along the bottom of the glass and down its right side because
+      // the module sits high and left in the well. Graded by where it sits in
+      // the scene like everything else raised.
       '<linearGradient id="', id, '-bezel" ', space, bodyBox, ">",
-      '<stop offset="0" stop-color="#1a1c1f"/>',
-      '<stop offset=".45" stop-color="#141619"/>',
-      '<stop offset="1" stop-color="#0d0f11"/>',
+      '<stop offset="0" stop-color="#8b8982"/>',
+      '<stop offset=".45" stop-color="#73716b"/>',
+      '<stop offset="1" stop-color="#55544f"/>',
       "</linearGradient>",
       '<radialGradient id="', id, '-keylight" ', space,
       ' cx="', n(L.bodyX + L.bodyW * 0.2), '" cy="', n(L.bodyY + L.bodyH * 0.05),
@@ -303,10 +330,21 @@
       '<stop offset=".45" stop-color="#e2ded4"/>',
       '<stop offset="1" stop-color="#bdb9ae"/>',
       "</linearGradient>",
+      // The side wall of a cap. Which wall of a key is on show is decided by
+      // where the key sits (see parallax below), and a wall is lit by which way
+      // it faces: the inward wall of a key on the left of the shell turns right,
+      // away from the light, and the inward wall of one on the right turns back
+      // into it. A single scene-wide ramp therefore shades every wall correctly,
+      // because position and facing are the same fact here.
+      '<linearGradient id="', id, '-wall" ', space, bodyBox, ">",
+      '<stop offset="0" stop-color="#4f4d47"/>',
+      '<stop offset=".5" stop-color="#6f6b64"/>',
+      '<stop offset="1" stop-color="#948e84"/>',
+      "</linearGradient>",
       '<linearGradient id="', id, '-keyRim" x1=".2" y1="0" x2=".8" y2="1">',
-      '<stop offset="0" stop-color="#ffffff" stop-opacity=".85"/>',
-      '<stop offset=".4" stop-color="#8d8a82" stop-opacity=".3"/>',
-      '<stop offset="1" stop-color="#000000" stop-opacity=".45"/>',
+      '<stop offset="0" stop-color="#ffffff" stop-opacity=".4"/>',
+      '<stop offset=".4" stop-color="#8d8a82" stop-opacity=".22"/>',
+      '<stop offset="1" stop-color="#000000" stop-opacity=".4"/>',
       "</linearGradient>",
       // Barely there: the caps are matte moulded plastic, not gel.
       '<linearGradient id="', id, '-gloss" x1=".3" y1="0" x2=".6" y2="1">',
@@ -391,15 +429,19 @@
       '" fill="#000000" opacity=".7" filter="url(#', id, '-contact)"/>');
 
     out.push('<path d="', outer, '" fill="#23262b" filter="url(#', id, '-drop)"/>');
-    out.push('<path', band, ' fill="#363b42"/>');
+    out.push('<path', band, ' fill="#42464d"/>');
     out.push('<path', band, ' fill="url(#', id, '-chamV)"/>');
     out.push('<path', band, ' fill="url(#', id, '-chamH)"/>');
     out.push('<path', band, ' fill="url(#', id, '-chamD)"/>');
-    // Fill light on the shadow side, so the silhouette survives a near-black page.
-    out.push('<path d="M', n(x + w - 1), ' ', n(y + h * 0.34),
+    // Fill light on the shadow side, so the silhouette survives a near-black
+    // page. Clipped to the shell: it is a hand-drawn arc rather than the real
+    // curve, and where it strays outside the outline it used to leave a bright
+    // nub in mid air off the right cap.
+    out.push('<clipPath id="', id, '-shell"><path d="', outer, '"/></clipPath>');
+    out.push('<g clip-path="url(#', id, '-shell)"><path d="M', n(x + w - 1), ' ', n(y + h * 0.34),
       'a', n(L.radius), ' ', n(L.radius), ' 0 0 1 ', n(-L.radius * 0.62), ' ', n(L.radius * 0.96),
       'H', n(x + w * 0.42), '" fill="none" stroke="#ffffff" stroke-opacity=".11"',
-      ' stroke-width="', n(1.8 * u), '"/>');
+      ' stroke-width="', n(1.8 * u), '"/></g>');
 
     out.push('<clipPath id="', id, '-face"><path d="', inner, '"/></clipPath>');
     out.push('<path d="', inner, '" fill="url(#', id, '-body)"/>');
@@ -413,22 +455,29 @@
 
   function screenArt(id, L) {
     var u = L.u, x = L.screenX, y = L.screenY, w = L.sw, h = L.sh;
-    var rc = L.recess, rb = L.bezel;
+    var well = L.well, fr = L.frame;
     var out = [];
 
     // Dark well.
-    out.push('<rect x="', n(x - rc), '" y="', n(y - rc), '" width="', n(w + rc * 2),
-      '" height="', n(h + rc * 2), '" rx="', n(16 * u), '" fill="url(#', id, '-recess)"/>');
-    out.push('<rect x="', n(x - rc), '" y="', n(y - rc), '" width="', n(w + rc * 2),
-      '" height="', n(h + rc * 2), '" rx="', n(16 * u),
+    out.push('<rect x="', n(x - well.l), '" y="', n(y - well.t),
+      '" width="', n(w + well.l + well.r), '" height="', n(h + well.t + well.b),
+      '" rx="', n(15 * u), '" fill="url(#', id, '-recess)"/>');
+    out.push('<rect x="', n(x - well.l), '" y="', n(y - well.t),
+      '" width="', n(w + well.l + well.r), '" height="', n(h + well.t + well.b),
+      '" rx="', n(15 * u),
       '" fill="none" stroke="#000000" stroke-opacity=".55" stroke-width="', n(2.2 * u), '"/>');
 
-    // The LCD module's own pale frame, sitting inside the well.
-    out.push('<rect x="', n(x - rb), '" y="', n(y - rb), '" width="', n(w + rb * 2),
-      '" height="', n(h + rb * 2), '" rx="', n(9 * u), '" fill="url(#', id, '-bezel)"/>');
-    out.push('<rect x="', n(x - rb), '" y="', n(y - rb), '" width="', n(w + rb * 2),
-      '" height="', n(h + rb * 2), '" rx="', n(9 * u),
-      '" fill="none" stroke="#000000" stroke-opacity=".35" stroke-width="', n(1.4 * u), '"/>');
+    // The LCD module's own pale frame, sitting inside the well and off to the
+    // top left of it, so what shows is a band under the glass and a strip down
+    // its right. Not a border: on the hardware there is nothing to see above or
+    // left of the glass, and drawing it all the way round reads as a bezel.
+    out.push('<rect x="', n(x - fr.l), '" y="', n(y - fr.t),
+      '" width="', n(w + fr.l + fr.r), '" height="', n(h + fr.t + fr.b),
+      '" rx="', n(5 * u), '" fill="url(#', id, '-bezel)"/>');
+    out.push('<rect x="', n(x - fr.l), '" y="', n(y - fr.t),
+      '" width="', n(w + fr.l + fr.r), '" height="', n(h + fr.t + fr.b),
+      '" rx="', n(5 * u),
+      '" fill="none" stroke="#000000" stroke-opacity=".45" stroke-width="', n(1.4 * u), '"/>');
 
     // Glass.
     out.push('<clipPath id="', id, '-well"><rect x="', n(x), '" y="', n(y),
@@ -444,34 +493,63 @@
     return out.join("");
   }
 
+  /*
+   * A key stands proud of the plate and the camera is over the middle of the
+   * shell, so a cap's top face is seen displaced outwards from its own base:
+   * the keys on the left show the wall on their right, the ones on the right
+   * show the wall on their left, and only a key dead centre shows none. It is
+   * the same thing that makes a tower at the edge of an aerial photograph lean
+   * away from the middle, and it is most of what separates a moulded cap from a
+   * sticker. The vertical term falls out much smaller than the horizontal one
+   * because it is the same displacement over a shell that is half as tall.
+   */
+  function parallax(L, cx, cy) {
+    var reach = L.bodyW / 2;
+    return {
+      x: L.lift * (cx - L.cx) / reach,
+      y: L.lift * (cy - L.cy) / reach,
+    };
+  }
+
   function control(id, L, spec, live) {
-    var u = L.u, grow = spec.grow, rim = 1.05 * u;
-    var shape = spec.shape;
+    var u = L.u, grow = spec.grow, rim = 0.45 * u;
+    var off = parallax(L, spec.cx, spec.cy);
+    // The base sits on the plate; the cap floats outwards off it, and the sliver
+    // of base left showing on the inward side is the wall.
+    var base = pillPath(spec.cx, spec.cy, spec.w, spec.h);
+    var cap = pillPath(spec.cx + off.x, spec.cy + off.y, spec.w, spec.h);
     return [
       '<g class="ssd-ctl" data-ssd-channel="', spec.channel, '" data-ssd-control="', spec.name,
       '" style="--ssd-sink:', n(2.8 * u), 'px" role="button">',
       live ? "<title>" + spec.label + "</title>" : "",
       '<g class="ssd-shadow" opacity=".55" transform="translate(0 ', n(3.4 * u), ')">',
-      '<path d="', shape, '" fill="#000000" stroke="#000000" stroke-width="', n(grow * 2 + 2 * u),
+      '<path d="', base, '" fill="#000000" stroke="#000000" stroke-width="', n(grow * 2 + 2 * u),
       '" stroke-linejoin="round" filter="url(#', id, '-btnShadow)"/></g>',
-      '<path d="', shape, '" fill="none" stroke="url(#', id,
+      paint(base, "url(#" + id + "-wall)", grow),
+      // Only the cap sinks under a press, into the wall it is standing on.
+      '<g class="ssd-cap">',
+      '<path d="', cap, '" fill="none" stroke="url(#', id,
       '-keyRim)" stroke-width="', n(grow * 2 + rim * 2), '" stroke-linejoin="round"/>',
-      paint(shape, "url(#" + id + "-key)", grow),
-      paint(shape, "url(#" + id + "-gloss)", grow, "ssd-gloss"),
-      paint(shape, "url(#" + id + "-scene)", grow + rim),
-      paint(shape, "#f7931a", grow, "ssd-hover"),
-      paint(shape, "#000000", grow, "ssd-press"),
+      paint(cap, "url(#" + id + "-key)", grow),
+      paint(cap, "url(#" + id + "-gloss)", grow, "ssd-gloss"),
+      paint(cap, "url(#" + id + "-scene)", grow + rim),
+      paint(cap, "#f7931a", grow, "ssd-hover"),
+      paint(cap, "#000000", grow, "ssd-press"),
+      "</g>",
       "</g>",
     ].join("");
   }
 
-  // Five discrete keys in a diamond. The real device has no printed glyphs on
-  // them, so neither does this; the accessible name carries the meaning.
+  // Five discrete keys in a diamond, and they are not all the same key turned
+  // round: up and down are pills lying down, left and right are pills standing
+  // up, and select is a true circle between them. The real device has no printed
+  // glyphs on them, so neither does this; the accessible name carries the meaning.
   function padArt(id, L, live) {
     var u = L.u, cx = L.padCx, cy = L.cy;
-    var armW = 92 * u, armH = 58 * u;
-    var midW = 100 * u, midH = 78 * u;
-    var dx = 130 * u, dy = 116 * u;
+    var armW = 105 * u, armH = 58 * u;   // up and down
+    var sideW = 66 * u, sideH = 94 * u;  // left and right
+    var mid = 103 * u;                   // select, as wide as it is tall
+    var dx = 118 * u, dy = 116 * u;
     var grow = 3 * u;
     var out = [];
 
@@ -480,15 +558,15 @@
     var keys = [
       ["up", CHANNEL.up, "Up", cx, cy - dy, armW, armH],
       ["down", CHANNEL.down, "Down", cx, cy + dy, armW, armH],
-      ["left", CHANNEL.left, "Left", cx - dx, cy, armH * 1.34, armH],
-      ["right", CHANNEL.right, "Right", cx + dx, cy, armH * 1.34, armH],
-      ["select", CHANNEL.select, "Select", cx, cy, midW, midH],
+      ["left", CHANNEL.left, "Left", cx - dx, cy, sideW, sideH],
+      ["right", CHANNEL.right, "Right", cx + dx, cy, sideW, sideH],
+      ["select", CHANNEL.select, "Select", cx, cy, mid, mid],
     ];
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
       out.push(control(id, L, {
         name: k[0], channel: k[1], label: k[2], grow: grow,
-        shape: pillPath(k[3], k[4], k[5], k[6]),
+        cx: k[3], cy: k[4], w: k[5], h: k[6],
       }, live));
     }
     return out.join("");
@@ -496,7 +574,7 @@
 
   function keysArt(id, L, live) {
     var u = L.u, cx = L.keyCx, cy = L.cy;
-    var kw = 92 * u, kh = 58 * u, gap = 118 * u;
+    var kw = 100 * u, kh = 54 * u, gap = 109 * u;
     var grow = 3 * u;
     var out = [];
     var keys = [
@@ -508,7 +586,7 @@
       var k = keys[i];
       out.push(control(id, L, {
         name: k[0], channel: k[1], label: k[2], grow: grow,
-        shape: pillPath(cx, k[3], kw, kh),
+        cx: cx, cy: k[3], w: kw, h: kh,
       }, live));
     }
     return out.join("");
