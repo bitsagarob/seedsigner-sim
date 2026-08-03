@@ -112,8 +112,8 @@ outside:</p>
   <li><strong>Camera</strong> — your webcam. SeedSigner reads QR codes with a C
   library that has no WebAssembly build, so the browser decodes the image and hands
   the raw bytes to the firmware's own unmodified decoder.</li>
-  <li><strong>Smartcard</strong> — a simulated Satochip answering real APDUs,
-  because browsers have no smartcard API at all.</li>
+  <li><strong>Smartcard</strong> — simulated SeedKeeper and Satochip cards answering
+  real APDUs, because browsers have no smartcard API at all.</li>
 </ul>
 <p>The wallet is pinned to a single upstream commit, and a build script in the
 repository rebuilds it from that commit — so the claim that this is the real
@@ -125,8 +125,9 @@ firmware is one you can check rather than take on trust.</p>
   passphrases, xpub export, loading and signing a PSBT, SeedQR backup, and every
   screen that draws a QR.</li>
   <li><strong>Partly:</strong> three simulated smartcards go in and out of the
-  reader and can be initialised with a PIN. Storing a seed on a card, and signing
-  with one, are not implemented yet.</li>
+  reader, each a SeedKeeper or a Satochip, and can be initialised with a PIN. A
+  seed can be saved onto a SeedKeeper and loaded back off it. Signing on a card is
+  not implemented yet.</li>
   <li><strong>Not at all:</strong> microSD, so settings reset when you reload.
   Animations do not animate, because this environment has no threads.</li>
 </ul>

@@ -132,7 +132,8 @@ def main() -> int:
               log.seen(r"\[card\] asked for a card, reader is empty", window) is None)
         check("no other card was reported",
               log.seen(r"\[card\] Card [BC] inserted", window) is None)
-        # A blank Satochip is what the wallet finds, so this is where it stops.
+        # A blank SeedKeeper -- the tray's default -- is what the wallet finds,
+        # so this is where it stops.
         log.wait(r"display\(\) enter: WarningScreen", 60, "the wallet to react", window)
         page.screenshot(path=harness.artifact("cards-card-a.png"))
         back_to_home(page, log)

@@ -2,6 +2,10 @@
 Put a seed on a simulated Satochip through the wallet's own screens, and read it
 back off the card afterwards.
 
+The tray defaults to a SeedKeeper, so this starts by swapping Card A for a
+Satochip -- the type is chosen before the card goes in, because a card is one
+thing or the other.
+
 The whole of the save-a-seed path runs here: the wallet initialises a blank card
 with a PIN, scans the BIP39 test vector with the camera, hands the seed to the
 card, and then -- on a later trip through the menus, with a fresh CardConnector
@@ -38,6 +42,7 @@ value.
 
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import harness
@@ -101,6 +106,25 @@ def pill(page, index):
     return page.locator(".cardtray-card").nth(index).locator(".cardtray-pill").inner_text()
 
 
+def pill_becomes(page, index, want, timeout=6.0):
+    """Wait for a card's pill to say something, then answer whether it does.
+
+    The tray repaints on a timer rather than on a message -- nothing waits on it,
+    so it costs nothing to be a quarter of a second late -- which makes reading a
+    pill the instant the wallet finished with the card a race.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if pill(page, index) == want:
+            return True
+        page.wait_for_timeout(200)
+    return False
+
+
+def kind(page, index):
+    return page.locator(".cardtray-kind").nth(index).inner_text()
+
+
 def main() -> int:
     if not os.path.exists(Y4M):
         print(f"no {Y4M}: run make_qr_y4m.py first", file=sys.stderr)
@@ -122,8 +146,17 @@ def main() -> int:
 
         log.wait(r"display\(\) enter: MainMenuScreen", 300, "the wallet to boot")
         log.wait(r"\[card\] tray attached", 30, "the card tray to reach Python")
+        # The tray offers a SeedKeeper by default, which is the card the product
+        # ships; this flow is the Satochip one, so swap the card before it goes
+        # in. A card's type cannot change once it is in the reader.
+        check("Card A is a SeedKeeper until told otherwise", kind(page, 0) == "SeedKeeper",
+              kind(page, 0))
+        page.locator(".cardtray-kind").nth(0).click()
+        check("and the tray swaps it for a Satochip", kind(page, 0) == "Satochip", kind(page, 0))
         page.locator(".cardtray-card").nth(0).click()
         check("Card A starts blank", pill(page, 0) == "blank", pill(page, 0))
+        check("its type is fixed while it is in the reader",
+              page.locator(".cardtray-kind").nth(0).is_disabled())
 
         # --- initialise the card ---------------------------------------------
         print("\ngiving the blank card a PIN")
@@ -143,7 +176,8 @@ def main() -> int:
                              "the card to be set up")
         check("the wallet puts a PIN on the blank card", True)
         press(page, "Enter")
-        check("the tray shows Card A initialised", pill(page, 0) == "initialised", pill(page, 0))
+        check("the tray shows Card A initialised", pill_becomes(page, 0, "initialised"),
+              pill(page, 0))
 
         # --- scan the seed the card is going to be given ----------------------
         print("\nscanning the test vector")
@@ -176,7 +210,7 @@ def main() -> int:
         page.screenshot(path=harness.artifact("cards-seed-imported.png"))
         press(page, "Enter")
         check("the card is seeded anyway, because the APDU succeeded",
-              pill(page, 0) == "seeded", pill(page, 0))
+              pill_becomes(page, 0, "seeded"), pill(page, 0))
         check("the other two cards are untouched",
               (pill(page, 1), pill(page, 2)) == ("blank", "blank"),
               f"{pill(page, 1)}, {pill(page, 2)}")
@@ -233,6 +267,9 @@ def main() -> int:
         check("reloading the page hands back three factory-fresh cards",
               page.locator(".cardtray-pill", has_text="blank").count() == 3,
               page.locator(".cardtray-row").inner_text().replace("\n", " | "))
+        check("and they are SeedKeepers again, which is the default",
+              [kind(page, i) for i in range(3)] == ["SeedKeeper"] * 3,
+              str([kind(page, i) for i in range(3)]))
 
         print("\ncard log:")
         log.dump("[card]")

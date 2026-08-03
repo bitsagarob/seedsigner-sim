@@ -82,8 +82,8 @@
           codes with pyzbar, a C library with no WebAssembly build, so decoding is done
           by the browser's BarcodeDetector or by jsQR and the bytes are handed to the
           unmodified decoder.</li>
-          <li><strong>Smartcard</strong> — a simulated Satochip that answers real APDUs,
-          because browsers have no smartcard API at all.</li>
+          <li><strong>Smartcard</strong> — simulated SeedKeeper and Satochip cards that
+          answer real APDUs, because browsers have no smartcard API at all.</li>
         </ul>
         <p>Nothing leaves your browser. The page declares a content security policy that
         permits no connections to any other origin, and there is no server to send anything to.</p>

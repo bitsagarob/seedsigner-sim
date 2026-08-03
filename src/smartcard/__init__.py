@@ -2,10 +2,10 @@
 Stand-in for pyscard.
 
 pyscard is a C extension that binds to the host's PC/SC daemon. Neither exists
-in a browser, so this package provides the same import surface, backed by three
-simulated Satochips that answer real APDUs. See simulated_card.py, which holds
-the cards and the reader they go in and out of; the modules here are the
-pyscard-shaped surface over it.
+in a browser, so this package provides the same import surface, backed by
+simulated SeedKeeper and Satochip cards that answer real APDUs. See
+simulated_card.py, which holds the cards and the reader they go in and out of;
+the modules here are the pyscard-shaped surface over it.
 
 Everything above this layer, the whole of pysatochip and the whole of SeedSigner,
 runs unmodified. Faking the transport rather than the wallet's own card calls is

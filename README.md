@@ -83,25 +83,41 @@ the network off.
 
 Working: the full menu tree, seed loading by QR or by hand, passphrases, xpub
 export, PSBT loading and signing, SeedQR backup, settings, and every screen that
-draws a QR. Three simulated smartcards go in and out of the reader, can be
-initialised with a PIN, check that PIN when asked, and will take a seed and
-derive from it — the card holds a real BIP32 master key and a real authentikey,
-and pysatochip verifies every answer it signs.
+draws a QR.
+
+The smartcard tray holds three cards, and each can be a **SeedKeeper** or a
+**Satochip** — you choose before you put it in, and SeedKeeper is the default
+because that is the card the device ships with. Either can be initialised with a
+PIN and will check that PIN when asked.
+
+- **A SeedKeeper** stores labelled secrets and gives them back under the export
+  rights they were stored with. The two flows the product exists for both work
+  end to end through the wallet's own screens: **Backup seed → To SeedKeeper**
+  saves a seed onto the card, and **Seeds → Load a seed → From SeedKeeper** reads
+  one back off it.
+- **A Satochip** takes a seed and derives from it. The card holds a real BIP32
+  master key and a real authentikey, and pysatochip verifies every answer it
+  signs.
 
 Not working, and worth knowing before you go looking:
 
-- **The wallet's own "Initialise with Seed" screen.** The card takes the seed and
-  derives from it correctly, and the tray says so, but the screen that asked for
-  it reports a failure: at the pinned tag `ToolsSatochipImportSeedView` unpacks
-  `card_bip32_import_seed()`'s return value into three, and on this backend that
-  method returns one thing — the authentikey. So a successful import is what
-  raises. That is upstream's bug, still present on their `dev` tip, and nothing
-  here works around it. Reading the seed back off the card afterwards works.
+- **The wallet's own "Initialise with Seed" screen**, on the Satochip side. The
+  card takes the seed and derives from it correctly, and the tray says so, but the
+  screen that asked for it reports a failure: at the pinned tag
+  `ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value
+  into three, and on this backend that method returns one thing — the
+  authentikey. So a successful import is what raises. That is upstream's bug,
+  still present on their `dev` tip, and nothing here works around it. Reading the
+  seed back off the card afterwards works.
+- **Moving a secret from one SeedKeeper to another.** That is an *encrypted*
+  export, done under a session key negotiated with the second card's public key,
+  and there is no second card in the reader to negotiate with. It comes back "not
+  supported" rather than being quietly done in the clear.
 - **Card signing.** PSBT and message signing on the card, PIN change and unblock,
   2FA, factory reset and the card-management screens all come back "not
   supported" — see [THIRD-PARTY.md](THIRD-PARTY.md) for the GlobalPlatform half.
 - **A card that remembers.** Card state is in memory only, so a page reload gives
-  you three factory-fresh cards. Deliberately: nothing you do here should outlive
+  you factory-fresh cards. Deliberately: nothing you do here should outlive
   the tab.
 - **microSD.** There is no card slot to emulate, so anything routed through one —
   settings surviving a reload, firmware update flows — does not happen. Settings
@@ -125,7 +141,7 @@ WebAssembly) inside a Web Worker. Four hardware seams are replaced:
 | Display | [`src/shims/browser_display.py`](src/shims/browser_display.py) | Swaps the panel driver underneath SeedSigner's own unmodified `Renderer`; raw RGB frames go to a canvas. |
 | Buttons | patched in [`src/web/wallet-worker.js`](src/web/wallet-worker.js) | The worker is blocked inside the wallet's main loop and can never answer a `postMessage`, so keys cross on a `SharedArrayBuffer` and wake it with `Atomics`. |
 | Camera + QR | [`src/shims/browser_camera.py`](src/shims/browser_camera.py) + [`src/web/wallet-camera.js`](src/web/wallet-camera.js) | pyzbar is a C library with no WebAssembly build, so the browser decodes and hands the bytes to SeedSigner's unmodified decoder. |
-| Smartcard | [`src/smartcard/`](src/smartcard) | Browsers have no smartcard API, so a simulated Satochip answers real APDUs and pysatochip runs against it unchanged. |
+| Smartcard | [`src/smartcard/`](src/smartcard) | Browsers have no smartcard API, so simulated SeedKeeper and Satochip cards answer real APDUs and pysatochip runs against them unchanged. |
 
 A fifth module, [`src/shims/browser_qr.py`](src/shims/browser_qr.py), makes the
 screens that *display* a QR draw one: their drawing lives in a thread this
@@ -176,8 +192,8 @@ origin, licence, and how to check each one.
 - [SeedSigner](https://github.com/SeedSigner/seedsigner) — the device and the
   firmware this runs. All of the interesting parts are theirs.
 - [3rdIteration/seedsigner](https://github.com/3rdIteration/seedsigner) — the fork
-  this is pinned to, which adds the smartcard support the simulated Satochip
-  answers.
+  this is pinned to, which adds the smartcard support the simulated cards
+  answer.
 - [Pyodide](https://pyodide.org) and [jsQR](https://github.com/cozmo/jsQR) — the two
   pieces of other people's work that make the browser side possible.
 

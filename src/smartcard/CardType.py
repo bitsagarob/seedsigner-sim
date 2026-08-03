@@ -1,9 +1,9 @@
-from smartcard.simulated_card import SATOCHIP_ATR
+from smartcard.simulated_card import JAVACARD_ATR
 
 
 class CardType:
     def matches(self, atr, reader=None):
-        return list(atr) == SATOCHIP_ATR
+        return list(atr) == JAVACARD_ATR
 
 
 class AnyCardType(CardType):

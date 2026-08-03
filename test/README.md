@@ -30,7 +30,7 @@ commit, which takes a few minutes; later runs reuse both.
 
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
 `tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`, `cards_browser`,
-`cards_seed`:
+`cards_seed`, `cards_seedkeeper`:
 
     python3 test/run.py scan          # everything with "scan" in the name
     python3 test/run.py leak          # just the leak scanner
@@ -132,6 +132,27 @@ cannot report success — `card_bip32_import_seed()` returns the authentikey and
 the view unpacks it as `(response, sw1, sw2)` — so a successful import is what
 raises `TypeError`. The card is seeded either way. The check is there so that the
 day upstream fixes it, this fails and says so.
+
+**`test_cards_seedkeeper.py`** -- the two flows the SeedSigner+ Smartcard is sold
+for, on a **SeedKeeper**, end to end through the wallet's own screens: scan the
+BIP39 test vector, save it to a blank card (which the wallet initialises with a
+PIN on the way), discard it from the wallet entirely, and load it back off the
+card.
+
+Three oracles, and they are independent. The card announces what it stored and
+what it exported, from the Python side of the APDU boundary, and the type,
+subtype, label and length it reports have to be the `Masterseed` layout the wallet
+claims to write. The wallet announces the screens it reached, and getting to the
+seed screen at all means pysatochip recovered the card's authentikey from the
+signature over the header and the secret, because it raises rather than returning
+if it cannot. And the seed the wallet ends up holding is compared, as a digest of
+the device canvas, against the one it held after the scan earlier in the same
+run: one seed, in by camera and back off a card, on one rendered screen. The
+digest is taken from the canvas rather than from a screenshot so that nothing
+about the surrounding page or its fonts can enter into it.
+
+It also reloads the page at the end and requires three factory-fresh SeedKeepers,
+because card state living only in memory is a decision rather than an oversight.
 
 ## Supporting files
 

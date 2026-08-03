@@ -233,52 +233,117 @@ implemented in Python. Everything above it — the whole of pysatochip, the whol
 SeedSigner — runs unmodified, which is the point: the flows are exercised rather
 than mocked.
 
-[`simulated_card.py`](../src/smartcard/simulated_card.py) implements a Satochip at
-the APDU level:
+[`simulated_card.py`](../src/smartcard/simulated_card.py) implements two applets at
+the APDU level, because this fork talks to two different cards and they are not the
+same product. A **Satochip** holds one BIP32 master key and derives from it. A
+**SeedKeeper** holds a list of labelled secrets and hands them back under the export
+rights each was stored with — which is the flow the SeedSigner+ Smartcard is sold
+for, so it is the tray's default.
 
-| Instruction | Behaviour |
-| --- | --- |
-| `SELECT` (`00 A4`) | 9000 for the Satochip AID, "file not found" for every other, which is how `card_select()` settles on Satochip |
-| `GET DATA` (`80 CA`) | CPLC, IIN, CIN — the three blobs pysatochip hashes into a card UID |
-| `GET STATUS` (`B0 3C`) | the 12-byte status blob: versions, PIN tries left, seeded, setup done, secure channel |
-| `SETUP` (`B0 2A`) | takes the PIN and becomes an initialised card; once per card |
-| `VERIFY PIN` (`B0 42`) | checks PIN0, spends a try when wrong, reports the count left in the `63Cx` status word |
-| `BIP32 IMPORT SEED` (`B0 6C`) | takes a master seed and derives the BIP32 master key and the authentikey from it; once per card |
-| `BIP32 RESET SEED` (`B0 77`) | forgets both again, if the PIN sent with the command is right |
-| `BIP32 GET AUTHENTIKEY` (`B0 73`) | the authentikey's x coordinate, signed by the authentikey |
-| `BIP32 GET EXTENDED KEY` (`B0 6D`) | a derived public key and chaincode, signed by the derived key and then by the authentikey |
-| anything else | `6D00`, "not supported" |
+The two share a base class, because pysatochip sends the identity, the setup, the
+PIN and the status blob to either card in the same shape and a second copy of those
+would drift.
 
-The seed is where the interesting part is. A Satochip does not hand back what it
-was given: it answers with a key and a signature, and pysatochip *recovers* the
-signing key from that signature and keeps the answer only if it matches what the
-message claimed. So the card has to hold real keys and really sign with them, and
-it does — `embit` derives BIP32 and signs, and the authentikey's private key is
-the first 32 bytes of `HmacSha512('Bitcoin seed2', seed)`, which is where a real
-Satochip's comes from too. That makes the authentikey this card reports the one a
-physical Satochip carrying the same seed would report.
+| Instruction | Applet | Behaviour |
+| --- | --- | --- |
+| `SELECT` (`00 A4`) | both | 9000 for the card's own AID, "file not found" for any other — which is how `card_select()` settles on the right applet, and what leaves a card of the wrong type unselected and answering nothing |
+| `GET DATA` (`80 CA`) | both | CPLC, IIN, CIN — the three blobs pysatochip hashes into a card UID |
+| `GET STATUS` (`B0 3C`) | both | the 12-byte status blob: versions, PIN tries left, carrying something, setup done, secure channel |
+| `SETUP` (`B0 2A`) | both | takes the PIN and becomes an initialised card; once per card |
+| `VERIFY PIN` (`B0 42`) | both | checks PIN0, spends a try when wrong, reports the count left in the `63Cx` status word |
+| `BIP32 GET AUTHENTIKEY` (`B0 73`) | both | the authentikey's x coordinate, signed by the authentikey |
+| `BIP32 IMPORT SEED` (`B0 6C`) | Satochip | takes a master seed and derives the BIP32 master key and the authentikey from it; once per card |
+| `BIP32 RESET SEED` (`B0 77`) | Satochip | forgets both again, if the PIN sent with the command is right |
+| `BIP32 GET EXTENDED KEY` (`B0 6D`) | Satochip | a derived public key and chaincode, signed by the derived key and then by the authentikey |
+| `SEEDKEEPER GET STATUS` (`B0 A7`) | SeedKeeper | how many secrets, how much memory, and how much of it is left |
+| `SEEDKEEPER IMPORT SECRET` (`B0 A1`) | SeedKeeper | plaintext only: the header, then the bytes 128 at a time, then a commit that answers with the id the card filed it under and the card's own hash of what it stored |
+| `SEEDKEEPER EXPORT SECRET` (`B0 A2`) | SeedKeeper | plaintext only, and only if that secret's export rights allow it: the header, then the bytes, then a signature over both |
+| `SEEDKEEPER LIST HEADERS` (`B0 A6`) | SeedKeeper | one header per call, `9C12` when there are no more |
+| `SEEDKEEPER RESET SECRET` (`B0 A5`) | SeedKeeper | forgets one, and gives back the space it took |
+| anything else | | `6D00`, "not supported" |
 
-Both keys live in the card object and nowhere else. There is no filesystem, no
-`localStorage`, no `IndexedDB`: reloading the page is a factory-fresh card, which
-is the behaviour a simulator that nobody should trust with a real seed ought to
-have. The BIP32 instructions are also gated on a verified PIN, cleared whenever
-the applet is selected, exactly as a JavaCard applet loses its PIN state when it
-is deselected. Answering `9C06` there is not an error to the client: it is
-`card_transmit()` being told to verify the PIN it cached and send the command
-again.
+### The Satochip's seed
 
-There are three cards because a user needs to tell one from another: put a PIN on
-Card A, check Card B is still blank, come back and find Card A as it was left. They
-differ only in their CIN, which is enough — pysatochip hashes CPLC+IIN+CIN into the
-UID it uses to distinguish cards. State lives in a module-level registry, so it
-survives being taken out of the reader and put back.
+A Satochip does not hand back what it was given: it answers with a key and a
+signature, and pysatochip *recovers* the signing key from that signature and keeps
+the answer only if it matches what the message claimed. So the card has to hold
+real keys and really sign with them, and it does — `embit` derives BIP32 and signs,
+and the authentikey's private key is the first 32 bytes of
+`HmacSha512('Bitcoin seed2', seed)`, which is where a real Satochip's comes from
+too. That makes the authentikey this card reports the one a physical Satochip
+carrying the same seed would report.
 
-Which card is in the reader is the user's business and the user is on the page, so
-the tray is a third `SharedArrayBuffer`
+### The SeedKeeper's secrets
+
+A secret is two things: a **header** and a payload. The header is 15 bytes plus a
+label, and the split in it is the whole design. The client proposes what the secret
+*is* — its type, its export rights, its subtype and its label — and the card owns
+everything else: the id it files it under, the fact that it arrived in plaintext,
+how many times it has been exported, and the fingerprint, which is the first four
+bytes of SHA-256 over the payload. A client that could write its own fingerprint
+could hand a secret back that was not the one it stored, and both
+`seedkeeper_import_secret()` and `seedkeeper_export_secret()` check that fingerprint
+against a hash they compute themselves.
+
+Export rights are the point of the product, so they are enforced where a card would
+enforce them. `Plaintext export allowed` is the only value this card can satisfy,
+because plaintext is the only way out it implements; a secret stored `Export
+forbidden`, `Encrypted export only` or `Authenticated export only` is refused with
+`9C31`, which pysatochip reports as "export not allowed by SeedKeeper policy" rather
+than as a failure to read. The check happens on the first APDU of the exchange,
+before any of the secret has left the card.
+
+Saving a seed writes a `Masterseed`, subtype 1: the 64-byte master seed, the
+wordlist its entropy is in, that entropy, and the passphrase. Loading it back reads
+the same layout and rebuilds the mnemonic from the entropy. Both halves are the
+wallet's own code — `SaveToSeedkeeperView` and `SeedKeeperSelectView` — and the card
+only stores and returns bytes.
+
+A SeedKeeper has an authentikey too, and it signs each export with it over the
+header *and* the payload together, so a card cannot hand back the right bytes under
+somebody else's label. There is no seed here to derive that key from — a real card
+generates it on the card at setup — so this one derives it from the card's own UID,
+which makes a given card the same card on every run and so lets a test say which
+card signed something.
+
+### State, and where it is not
+
+Everything a card holds lives in the card object and nowhere else. There is no
+filesystem, no `localStorage`, no `IndexedDB`: reloading the page is a factory-fresh
+card, which is the behaviour a simulator that nobody should trust with a real seed
+ought to have.
+
+Every applet instruction is gated on a verified PIN, cleared whenever the applet is
+selected, exactly as a JavaCard applet loses its PIN state when it is deselected.
+Answering `9C06` there is not an error to the client: it is `card_transmit()` being
+told to verify the PIN it cached and send the command again. Card-edge instructions
+are also gated on the applet being *selected* at all, because what is on the other
+end of a failed `SELECT` is the card manager, which has never heard of a Satochip —
+that is what stops a Satochip being half-driven through a SeedKeeper flow, and given
+a PIN, before the first instruction it does not have.
+
+There are three tray slots because a user needs to tell one card from another: put a
+PIN on Card A, check Card B is still blank, come back and find Card A as it was
+left. Each slot holds one card of each type, and choosing the type in the tray is
+choosing which card is in your hand, so the two have different CINs and so different
+UIDs — pysatochip hashes CPLC+IIN+CIN into the UID it uses to distinguish cards.
+State lives in a module-level registry, so it survives being taken out of the reader
+and put back, and survives its slot being switched to the other type and back.
+
+Which card is in the reader, and which type it is, are the user's business and the
+user is on the page, so the tray is a third `SharedArrayBuffer`
 ([`wallet-cards.js`](../src/web/wallet-cards.js)): the page writes the inserted
-index and bumps a sequence number, and the worker parks on it in slices while the
-wallet waits for a card. One slot per card goes the other way, packed into an
-`Int32`, so the tray can show blank / initialised / seeded and the PIN tries left.
+index and the type of each slot, and bumps a sequence number, and the worker parks
+on it in slices while the wallet waits for a card. Six slots go the other way, one
+per card, packed into an `Int32` each, so the tray can show blank / initialised /
+seeded and the PIN tries left — for both of a slot's cards, because the user can
+switch type with the wallet not looking and the page has no way to ask Python about
+the card that is not in the reader.
+
+The type control is a button under each card rather than something inside it. A card
+is a SeedKeeper or a Satochip, not a card with a setting on it, so the choice is
+made before it goes in and is disabled while it is in the reader — the same reason
+the eject control goes dead with nothing to eject.
 
 Two smaller fakes complete the picture. pyscard notifies observers of insert and
 remove events from a background thread; there is no such thread, so polling happens
@@ -288,12 +353,16 @@ has been pulled raises, rather than letting a flow run to completion against a c
 the user is holding in their hand.
 
 **Not implemented:** signing (`SIGN_TRANSACTION`, `SIGN_MESSAGE`), private-key and
-BIP85 export, PIN change and unblock, 2FA, card label and NDEF, factory reset, and
-the secure channel — all still `6D00`, so the wallet reports them as unsupported
-rather than being told a comfortable lie. The secure channel is the one that needs
-saying twice: it would encrypt every APDU with a session key negotiated over ECDH
-to protect the wire between reader and card, there is no wire here, and the card
-says so in `GET STATUS` so pysatochip never wraps anything.
+BIP85 export, PIN change and unblock, 2FA, card label and NDEF, factory reset, the
+SeedKeeper's encrypted import and export and its log, and the secure channel — all
+still `6D00`, so the wallet reports them as unsupported rather than being told a
+comfortable lie. Two need saying twice. The secure channel would encrypt every APDU
+with a session key negotiated over ECDH to protect the wire between reader and card;
+there is no wire here, and the card says so in `GET STATUS` so pysatochip never wraps
+anything. And a SeedKeeper's *encrypted* export is what moves a secret to a second
+card without it ever appearing in the clear; it needs a session key negotiated with
+that card's public key, and there is no second card here to negotiate with, so
+clone-to-another-card is refused rather than quietly done in plaintext.
 
 One flow does not work, and it is not this package's fault.
 `ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value

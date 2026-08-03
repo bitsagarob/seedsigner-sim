@@ -43,6 +43,7 @@ SUITE = [
     ("scan_native", ["test_scan_native.py"], True),
     ("cards_browser", ["test_cards_browser.py"], True),
     ("cards_seed", ["test_cards_seed.py"], True),
+    ("cards_seedkeeper", ["test_cards_seedkeeper.py"], True),
 ]
 
 # The same file scanned twice, once per QR encoding. Both must reach the same

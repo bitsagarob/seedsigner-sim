@@ -48,6 +48,12 @@ def main() -> int:
         check("labelled A, B, C",
               [page.locator(".cardtray-name").nth(i).inner_text() for i in range(3)]
               == ["Card A", "Card B", "Card C"])
+        # The product this simulator demonstrates ships SeedKeeper cards, so that
+        # is what the tray offers until the user says otherwise.
+        check("every card is a SeedKeeper to begin with",
+              [page.locator(".cardtray-kind").nth(i).inner_text() for i in range(3)]
+              == ["SeedKeeper"] * 3,
+              str([page.locator(".cardtray-kind").nth(i).inner_text() for i in range(3)]))
         check("the page does not scroll sideways",
               page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
 
@@ -71,6 +77,23 @@ def main() -> int:
               [page.locator(".cardtray-card").nth(i).get_attribute("aria-pressed")
                for i in range(3)] == ["true", "false", "false"])
         check("the eject control is live", not page.locator(".cardtray-eject").is_disabled())
+        # A card is a SeedKeeper or a Satochip, not a card with a setting on it,
+        # so the choice is made before it goes in and is fixed while it is in.
+        check("the inserted card's type is fixed",
+              page.locator(".cardtray-kind").nth(0).is_disabled())
+        check("the others can still be changed",
+              not page.locator(".cardtray-kind").nth(1).is_disabled())
+        page.locator(".cardtray-kind").nth(1).click()
+        page.wait_for_timeout(300)
+        check("clicking a type swaps that card for the other kind",
+              [page.locator(".cardtray-kind").nth(i).inner_text() for i in range(3)]
+              == ["SeedKeeper", "Satochip", "SeedKeeper"],
+              str([page.locator(".cardtray-kind").nth(i).inner_text() for i in range(3)]))
+        check("and does not disturb the reader",
+              page.locator(".cardtray-slotlabel").inner_text() == "Card A inserted")
+        page.locator(".cardtray-kind").nth(1).click()
+        page.wait_for_timeout(300)
+        check("and swaps it back", page.locator(".cardtray-kind").nth(1).inner_text() == "SeedKeeper")
         check("focus went back to the page so the wallet keeps the keyboard",
               page.evaluate("document.activeElement === document.body"),
               page.evaluate("document.activeElement.className"))
