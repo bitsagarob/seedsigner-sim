@@ -8,8 +8,8 @@
 [![release](https://img.shields.io/github/v/release/bitsagarob/seedsigner-sim?style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/releases/latest)
 [![licence](https://img.shields.io/github/license/bitsagarob/seedsigner-sim?style=flat-square)](LICENSE)
 
-The real [SeedSigner](https://seedsigner.com) firmware — the actual Python from the
-device — running in a browser tab. Its screen is a canvas, its buttons are your
+The real [SeedSigner](https://seedsigner.com) firmware, the actual Python from the
+device, running in a browser tab. Its screen is a canvas, its buttons are your
 keyboard, and its camera is your webcam.
 
 > **This is a simulator, not a wallet.**
@@ -56,7 +56,7 @@ and `wallet.zip` is built rather than shipped so that what you run is provably t
 pinned commit and not something a maintainer pasted in. Both steps verify what they
 download before using it.
 
-The two headers that server sends are not optional — without cross-origin isolation
+The two headers that server sends are not optional: without cross-origin isolation
 the page cannot use `SharedArrayBuffer` and the wallet never starts.
 [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md) is the short version. After the first
 load the page runs offline.
@@ -64,7 +64,7 @@ load the page runs offline.
 Arrow keys move, Enter selects, `1` `2` `3` are the three side buttons. You can
 also click the buttons on the device.
 
-## What it claims, and how to check it
+## What it is, and how to verify it
 
 - **It is the firmware, not a re-creation.** `wallet.zip` holds the upstream Python
   tree and the wallet's own `Controller.start()` runs it. Menus, seed handling,
@@ -73,16 +73,16 @@ also click the buttons on the device.
   replaced from the outside, by the modules in [`src/shims/`](src/shims). That is
   the one claim worth checking rather than believing.
 - **Pinned to a release, not a branch tip.** [`UPSTREAM`](UPSTREAM) names the tag
-  `SeSi-0.8.7+ShSi-B11` (`662d9dba…`) — the same tag the official pi0-smartcard
+  `SeSi-0.8.7+ShSi-B11` (`662d9dba…`), the same tag the official pi0-smartcard
   device image is built from, so this and a physical device run the same code. A
   branch tip can be rebased out from under a pin; a tag cannot.
 - **You can rebuild it and compare.** `build/build-wallet-zip.sh` reproduces
-  `wallet.zip` byte for byte — fixed timestamps, fixed order, no build host in the
+  `wallet.zip` byte for byte: fixed timestamps, fixed order, no build host in the
   output. If your hash matches the file a page served you, what you ran was the
   pin, its pinned dependencies and this repository's simulated card, and nothing
   else.
 - **A machine re-derives that hash on every push**, on a runner that has never seen
-  this repository and shares no cache with anything — and GitHub signs the result:
+  this repository and shares no cache with anything, and GitHub signs the result:
   `gh attestation verify wallet.zip --repo bitsagarob/seedsigner-sim`.
 - **Upstream's own tests run against our pinned versions.** CI clones SeedSigner's
   22,000-line suite from the same commit and runs 949 of its tests
@@ -98,7 +98,7 @@ also click the buttons on the device.
   with the network off.
 
 > If the zip hashes differ but the **contents** hash matches, the two builds hold
-> the same files and differ only in compression — some distributions ship zlib-ng.
+> the same files and differ only in compression: some distributions ship zlib-ng.
 > That is packaging, not code; `wallet.zip.manifest` lists a sha256 per file.
 
 ## What works, and what does not
@@ -107,7 +107,7 @@ also click the buttons on the device.
 
 - The full menu tree, seed loading by QR or by hand, passphrases, xpub export,
   PSBT loading and signing, SeedQR backup, settings, every screen that draws a QR.
-- Three card slots. Each holds a **SeedKeeper** or a **Satochip** — your choice
+- Three card slots. Each holds a **SeedKeeper** or a **Satochip**: your choice
   before you insert it, SeedKeeper by default, since that is the card the device
   ships with. Either takes a PIN and checks it.
 - **SeedKeeper, end to end:** *Backup seed → To SeedKeeper* puts a seed on the
@@ -117,23 +117,23 @@ also click the buttons on the device.
 
 **Does not**
 
-- **"Initialise with Seed" on the Satochip side — upstream's bug, not ours.**
+- **"Initialise with Seed" on the Satochip side: upstream's bug, not ours.**
   `ToolsSatochipImportSeedView` unpacks three values from
   `card_bip32_import_seed()`, which returns one, so a *successful* import is what
   raises. Still present on their `dev` tip; nothing here works around it. The card
   is seeded regardless and reading it back works.
-- **Copying a secret from one SeedKeeper to another** — an encrypted exchange
+- **Copying a secret from one SeedKeeper to another**, an encrypted exchange
   needing a second card to negotiate a session key with. Refused rather than
   quietly done in the clear.
 - **Card signing**, PIN change and unblock, 2FA, factory reset and the
   card-management screens: all answer "not supported".
 - **Cards that remember.** State is in memory only, so a reload gives factory-fresh
-  cards. Deliberate — nothing you do here should outlive the tab.
+  cards. Deliberate: nothing you do here should outlive the tab.
 - **microSD.** No slot to emulate, so settings reset on reload and the firmware
   update flows do not happen.
 - **Anything drawn from a background thread.** No threads here: no spinner, no
   scrolling long text, no pulsing warning border. The two animations that carry
-  information — camera preview, animated QR — are pumped by hand. Thread-based
+  information (camera preview, animated QR) are pumped by hand. Thread-based
   work such as brute-force address verification never completes.
 - **Timing-based behaviour.** No wipe timer, no screensaver, no battery readings.
 - **Real security properties.** A browser tab is not an air gap, and Pyodide's
@@ -155,8 +155,8 @@ A fifth module, [`src/shims/browser_qr.py`](src/shims/browser_qr.py), makes the
 screens that *display* a QR draw one: their drawing lives in a thread this
 environment cannot run.
 
-That single constraint — a worker that is permanently blocked and cannot service a
-message — explains most of the architecture, including why keys, camera frames and
+That single constraint (a worker that is permanently blocked and cannot service a
+message) explains most of the architecture, including why keys, camera frames and
 the card tray all travel over shared memory.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the long version, including the
 data flow from webcam to decoded seed and why the browser's `BarcodeDetector` is
@@ -187,22 +187,22 @@ and the page must be served with the two isolation headers or nothing starts.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 Almost none of the code that runs here was written for this repository: the wallet
 is upstream SeedSigner (MIT, Copyright (c) 2021 SeedSigner), the interpreter is
 Pyodide, the QR decoder is jsQR, and everything the wallet imports is somebody
-else's library. [THIRD-PARTY.md](THIRD-PARTY.md) lists all of it — version,
+else's library. [THIRD-PARTY.md](THIRD-PARTY.md) lists all of it: version,
 origin, licence, and how to check each one.
 
 ## Credits
 
-- [SeedSigner](https://github.com/SeedSigner/seedsigner) — the device and the
+- [SeedSigner](https://github.com/SeedSigner/seedsigner), the device and the
   firmware this runs. All of the interesting parts are theirs.
-- [3rdIteration/seedsigner](https://github.com/3rdIteration/seedsigner) — the fork
+- [3rdIteration/seedsigner](https://github.com/3rdIteration/seedsigner), the fork
   this is pinned to, which adds the smartcard support the simulated cards
   answer.
-- [Pyodide](https://pyodide.org) and [jsQR](https://github.com/cozmo/jsQR) — the two
+- [Pyodide](https://pyodide.org) and [jsQR](https://github.com/cozmo/jsQR), the two
   pieces of other people's work that make the browser side possible.
 
 This is an independent project. It is not affiliated with or endorsed by the

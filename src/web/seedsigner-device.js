@@ -159,7 +159,7 @@
     return [
       "<defs>",
       // Shell top face: key light upper-left, falling away to the lower right.
-      // Flatter than a glossy consumer shell — the real one is a matte grey.
+      // Flatter than a glossy consumer shell: the real one is a matte grey.
       '<linearGradient id="', id, '-body" ', space, bodyBox, ">",
       '<stop offset="0" stop-color="#494c50"/>',
       '<stop offset=".38" stop-color="#34363a"/>',

@@ -2,7 +2,7 @@
 
 **How you checked it**
 `python3 test/run.py` at minimum. If you touched a hardware seam, say which of the
-suite's assertions covers the change — and if none did, that is the first thing to
+suite's assertions covers the change, and if none did, that is the first thing to
 add.
 
 **Does it change what the simulator claims?**

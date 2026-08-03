@@ -71,7 +71,7 @@
   // The three things a user can tell apart about a card, in one Int32 so the
   // whole tray fits in the header. simulated_card.py is the only writer.
   function describe(state) {
-    if (state === UNKNOWN) return { known: false, label: "—", tries: null };
+    if (state === UNKNOWN) return { known: false, label: "?", tries: null };
     var setupDone = (state & 1) !== 0;
     var seeded = (state & 2) !== 0;
     var kind = seeded ? "seeded" : (setupDone ? "initialised" : "blank");
@@ -182,7 +182,7 @@
         '<button type="button" class="cardtray-card" data-index="' + i + '" aria-pressed="false">' +
         '<span class="cardtray-top">' + CHIP + '<span class="cardtray-in">IN</span></span>' +
         '<span class="cardtray-name">' + labelFor(i) + "</span>" +
-        '<span class="cardtray-pill">—</span>' +
+        '<span class="cardtray-pill">?</span>' +
         '<span class="cardtray-tries"></span></button>' +
         '<button type="button" class="cardtray-kind" data-index="' + i + '"></button>';
       row.appendChild(cell);

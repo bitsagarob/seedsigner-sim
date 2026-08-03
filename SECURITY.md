@@ -17,7 +17,7 @@ So the interesting risks are not the usual ones. They are:
    a seed that was never in front of the camera. A failed scan is recoverable; a
    wrong seed presented as a right one is not. This is why the browser's
    `BarcodeDetector` is used only to decide *whether* a QR is present and is never
-   trusted to say *what it contains* — see
+   trusted to say *what it contains*; see
    [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#why-rawvalue-is-never-trusted).
 3. **Something leaves the page.** There is no backend and the page's CSP permits no
    cross-origin connections. Same-origin requests are permitted and required, to fetch the wallet and the Python runtime. Anything that changes that is a serious bug.
@@ -31,7 +31,7 @@ So the interesting risks are not the usual ones. They are:
 - A route to the wallet that does not carry the "this is a simulator" warning, or a
   change that weakens or hides it.
 - Anything that can make the wallet report seed, address or PSBT data that did not
-  come from the user's own input — including decoder or shared-buffer handling
+  come from the user's own input, including decoder or shared-buffer handling
   bugs.
 - Any outbound network request from the page, any way to load a third-party
   resource, any CSP bypass, XSS or script injection in the pages in `src/web/`.
@@ -69,8 +69,8 @@ Use GitHub's private vulnerability reporting on
 [bitsagarob/seedsigner-sim](https://github.com/bitsagarob/seedsigner-sim):
 **Security → Report a vulnerability**. That channel is private to the maintainers.
 
-If it is not sensitive — a documentation error, a missing warning, a hardening
-suggestion — a normal issue is fine and faster.
+If it is not sensitive (a documentation error, a missing warning, a hardening
+suggestion), a normal issue is fine and faster.
 
 Please include:
 
@@ -80,7 +80,7 @@ Please include:
 - what you expected and what happened instead;
 - for a decoder or buffer issue, the input that triggered it.
 
-Never attach a real seed phrase, a real xpub or a real PSBT. Use test vectors —
+Never attach a real seed phrase, a real xpub or a real PSBT. Use test vectors:
 `test/make_qr_y4m.py` builds material from the standard BIP39 test seed.
 
 ## What to expect
@@ -97,7 +97,7 @@ release branches to backport to.
 ## If you entered a real seed phrase here
 
 Treat it as compromised, and move the funds to a new seed generated on a device you
-trust. The simulator does not transmit or store anything — but it ran in a browser,
+trust. The simulator does not transmit or store anything, but it ran in a browser,
 on a machine with a network, alongside every extension and every other tab, and
 none of that is a place a seed should ever have been. Do not weigh the odds; just
 move.

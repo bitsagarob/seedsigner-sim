@@ -4,9 +4,9 @@ How the real SeedSigner firmware ends up running in a browser tab, and why the
 code looks the way it does.
 
 The short version: the wallet's own Python runs unmodified under Pyodide in a Web
-Worker, and four hardware seams are replaced from the outside. One constraint —
-the worker is permanently blocked inside the wallet's main loop and can never
-answer a message — explains most of the rest.
+Worker, and four hardware seams are replaced from the outside. One constraint (the
+worker is permanently blocked inside the wallet's main loop and can never answer a
+message) explains most of the rest.
 
 ## Contents
 
@@ -36,8 +36,8 @@ answer a message — explains most of the rest.
                                                     browser_qr.py
 ```
 
-Three buffers cross the boundary, one per input: keys, camera, card tray. Output
-— the display frames — goes the other way as ordinary `postMessage`, because that
+Three buffers cross the boundary, one per input: keys, camera, card tray. Output,
+the display frames, goes the other way as ordinary `postMessage`, because that
 direction still works (see below).
 
 `wallet.zip` is the wallet: the `seedsigner` package from the commit pinned in
@@ -69,7 +69,7 @@ So every input crosses on a `SharedArrayBuffer` instead: shared memory the worke
 can read synchronously, and park on with `Atomics.wait` until the page bumps it
 with `Atomics.notify`. That is why the page needs cross-origin isolation
 (`Cross-Origin-Opener-Policy: same-origin` plus
-`Cross-Origin-Embedder-Policy: require-corp`) — without it `SharedArrayBuffer` is
+`Cross-Origin-Embedder-Policy: require-corp`); without it `SharedArrayBuffer` is
 not constructible and there is no way in at all. `wallet.html` checks
 `crossOriginIsolated` before it even starts the worker and says so plainly if the
 server got it wrong.
@@ -77,8 +77,8 @@ server got it wrong.
 It is also why the wallet runs in a worker rather than on the page's thread: the
 blocking is fine as long as it happens somewhere the UI is not.
 
-Two of the three channels (`wallet-camera.js`, `wallet-cards.js`) put both halves —
-page and worker — in one file, loaded by the page with a `<script>` tag and by the
+Two of the three channels (`wallet-camera.js`, `wallet-cards.js`) put both halves,
+page and worker, in one file, loaded by the page with a `<script>` tag and by the
 worker with `importScripts`. They have to agree byte-for-byte on the buffer layout,
 and a layout written down twice is a layout that drifts.
 
@@ -128,7 +128,7 @@ instead. `js_peek_key` is the same channel without the parking.
 
 Polling introduced one problem worth knowing about. A single pass of the scan
 loop asks about several keys in turn (`KEY_RIGHT` before `KEY_LEFT`), so a press
-has to stay claimable long enough for every check in that pass to see it — but not
+has to stay claimable long enough for every check in that pass to see it, but not
 forever, or a key nobody wants sits at the front hiding the press behind it. Hence
 `_PENDING_KEYS`, where each pending press is offered up to four times and then
 dropped.
@@ -140,13 +140,13 @@ dropped.
 
 Two things are faked here, not one: the video stream, and the decode.
 
-The stream is easy to justify — a browser has `getUserMedia` and no picamera. The
+The stream is easy to justify: a browser has `getUserMedia` and no picamera. The
 decode is the interesting one. SeedSigner reads QR codes with **pyzbar**, a binding
 to the zbar C library, and there is no zbar built for WebAssembly. Porting it is
 not the answer, because the browser already has a QR decoder of its own. So the
-fake sits exactly where SeedSigner reaches for hardware, and everything above it —
-`ScanScreen`, `DecodeQR`'s parsing of SeedQR, CompactSeedQR, PSBT and UR payloads,
-and every view that consumes them — runs unmodified.
+fake sits exactly where SeedSigner reaches for hardware, and everything above it
+(`ScanScreen`, `DecodeQR`'s parsing of SeedQR, CompactSeedQR, PSBT and UR payloads,
+and every view that consumes them) runs unmodified.
 
 ### The buffer
 
@@ -180,7 +180,7 @@ the decoder with repeats of itself.
 2. `BarcodeDetector`, if the browser has it, is asked whether there is a QR in the
    capture at all. On almost every frame the answer is no, and native code says no
    faster than JavaScript can.
-3. If it says yes — or if there is no `BarcodeDetector` — **jsQR** decodes the same
+3. If it says yes, or if there is no `BarcodeDetector`, **jsQR** decodes the same
    `ImageData` and returns `binaryData`: the codewords themselves, as bytes.
 4. Those bytes are written into the buffer and `QR_LEN` is set.
 5. In the worker, `DecodeQR.extract_qr_data` (the pyzbar call) ignores the image it
@@ -216,8 +216,8 @@ fails if the wallet reports any seed at all.
 
 `ScanScreen` draws its live preview from a thread, and this environment has no
 threads (see below), so the preview would be frozen on whatever was drawn before
-it. Rather than reimplement it — it draws the progress bar for animated QRs, the
-frame-accepted indicator and the translated instructions — the shim lets
+it. Rather than reimplement it (it draws the progress bar for animated QRs, the
+frame-accepted indicator and the translated instructions), the shim lets
 SeedSigner's own loop body run exactly one pass per camera read: `keep_running`
 answers `True` once, then `False`, so `run()` draws a single frame and returns.
 One frame read, one frame drawn.
@@ -229,15 +229,15 @@ One frame read, one frame drawn.
 Browsers have no smartcard API at all, so the only honest place to fake a card is
 the transport. pysatochip reaches a physical card through **pyscard**; this package
 *is* `smartcard`, the module name pyscard occupies, and it answers with cards
-implemented in Python. Everything above it — the whole of pysatochip, the whole of
-SeedSigner — runs unmodified, which is the point: the flows are exercised rather
+implemented in Python. Everything above it (the whole of pysatochip, the whole of
+SeedSigner) runs unmodified, which is the point: the flows are exercised rather
 than mocked.
 
 [`simulated_card.py`](../src/smartcard/simulated_card.py) implements two applets at
 the APDU level, because this fork talks to two different cards and they are not the
 same product. A **Satochip** holds one BIP32 master key and derives from it. A
 **SeedKeeper** holds a list of labelled secrets and hands them back under the export
-rights each was stored with — which is the flow the SeedSigner+ Smartcard is sold
+rights each was stored with, which is the flow the SeedSigner+ Smartcard is sold
 for, so it is the tray's default.
 
 The two share a base class, because pysatochip sends the identity, the setup, the
@@ -246,8 +246,8 @@ would drift.
 
 | Instruction | Applet | Behaviour |
 | --- | --- | --- |
-| `SELECT` (`00 A4`) | both | 9000 for the card's own AID, "file not found" for any other — which is how `card_select()` settles on the right applet, and what leaves a card of the wrong type unselected and answering nothing |
-| `GET DATA` (`80 CA`) | both | CPLC, IIN, CIN — the three blobs pysatochip hashes into a card UID |
+| `SELECT` (`00 A4`) | both | 9000 for the card's own AID, "file not found" for any other, which is how `card_select()` settles on the right applet, and what leaves a card of the wrong type unselected and answering nothing |
+| `GET DATA` (`80 CA`) | both | CPLC, IIN, CIN: the three blobs pysatochip hashes into a card UID |
 | `GET STATUS` (`B0 3C`) | both | the 12-byte status blob: versions, PIN tries left, carrying something, setup done, secure channel |
 | `SETUP` (`B0 2A`) | both | takes the PIN and becomes an initialised card; once per card |
 | `VERIFY PIN` (`B0 42`) | both | checks PIN0, spends a try when wrong, reports the count left in the `63Cx` status word |
@@ -267,7 +267,7 @@ would drift.
 A Satochip does not hand back what it was given: it answers with a key and a
 signature, and pysatochip *recovers* the signing key from that signature and keeps
 the answer only if it matches what the message claimed. So the card has to hold
-real keys and really sign with them, and it does — `embit` derives BIP32 and signs,
+real keys and really sign with them, and it does: `embit` derives BIP32 and signs,
 and the authentikey's private key is the first 32 bytes of
 `HmacSha512('Bitcoin seed2', seed)`, which is where a real Satochip's comes from
 too. That makes the authentikey this card reports the one a physical Satochip
@@ -277,7 +277,7 @@ carrying the same seed would report.
 
 A secret is two things: a **header** and a payload. The header is 15 bytes plus a
 label, and the split in it is the whole design. The client proposes what the secret
-*is* — its type, its export rights, its subtype and its label — and the card owns
+*is* (its type, its export rights, its subtype and its label), and the card owns
 everything else: the id it files it under, the fact that it arrived in plaintext,
 how many times it has been exported, and the fingerprint, which is the first four
 bytes of SHA-256 over the payload. A client that could write its own fingerprint
@@ -296,13 +296,13 @@ before any of the secret has left the card.
 Saving a seed writes a `Masterseed`, subtype 1: the 64-byte master seed, the
 wordlist its entropy is in, that entropy, and the passphrase. Loading it back reads
 the same layout and rebuilds the mnemonic from the entropy. Both halves are the
-wallet's own code — `SaveToSeedkeeperView` and `SeedKeeperSelectView` — and the card
+wallet's own code (`SaveToSeedkeeperView` and `SeedKeeperSelectView`), and the card
 only stores and returns bytes.
 
 A SeedKeeper has an authentikey too, and it signs each export with it over the
 header *and* the payload together, so a card cannot hand back the right bytes under
-somebody else's label. There is no seed here to derive that key from — a real card
-generates it on the card at setup — so this one derives it from the card's own UID,
+somebody else's label. There is no seed here to derive that key from (a real card
+generates it on the card at setup), so this one derives it from the card's own UID,
 which makes a given card the same card on every run and so lets a test say which
 card signed something.
 
@@ -318,7 +318,7 @@ selected, exactly as a JavaCard applet loses its PIN state when it is deselected
 Answering `9C06` there is not an error to the client: it is `card_transmit()` being
 told to verify the PIN it cached and send the command again. Card-edge instructions
 are also gated on the applet being *selected* at all, because what is on the other
-end of a failed `SELECT` is the card manager, which has never heard of a Satochip —
+end of a failed `SELECT` is the card manager, which has never heard of a Satochip;
 that is what stops a Satochip being half-driven through a SeedKeeper flow, and given
 a PIN, before the first instruction it does not have.
 
@@ -326,7 +326,7 @@ There are three tray slots because a user needs to tell one card from another: p
 PIN on Card A, check Card B is still blank, come back and find Card A as it was
 left. Each slot holds one card of each type, and choosing the type in the tray is
 choosing which card is in your hand, so the two have different CINs and so different
-UIDs — pysatochip hashes CPLC+IIN+CIN into the UID it uses to distinguish cards.
+UIDs: pysatochip hashes CPLC+IIN+CIN into the UID it uses to distinguish cards.
 State lives in a module-level registry, so it survives being taken out of the reader
 and put back, and survives its slot being switched to the other type and back.
 
@@ -336,13 +336,13 @@ user is on the page, so the tray is a third `SharedArrayBuffer`
 index and the type of each slot, and bumps a sequence number, and the worker parks
 on it in slices while the wallet waits for a card. Six slots go the other way, one
 per card, packed into an `Int32` each, so the tray can show blank / initialised /
-seeded and the PIN tries left — for both of a slot's cards, because the user can
+seeded and the PIN tries left, for both of a slot's cards, because the user can
 switch type with the wallet not looking and the page has no way to ask Python about
 the card that is not in the reader.
 
 The type control is a button under each card rather than something inside it. A card
 is a SeedKeeper or a Satochip, not a card with a setting on it, so the choice is
-made before it goes in and is disabled while it is in the reader — the same reason
+made before it goes in and is disabled while it is in the reader, the same reason
 the eject control goes dead with nothing to eject.
 
 Two smaller fakes complete the picture. pyscard notifies observers of insert and
@@ -354,7 +354,7 @@ the user is holding in their hand.
 
 **Not implemented:** signing (`SIGN_TRANSACTION`, `SIGN_MESSAGE`), private-key and
 BIP85 export, PIN change and unblock, 2FA, card label and NDEF, factory reset, the
-SeedKeeper's encrypted import and export and its log, and the secure channel — all
+SeedKeeper's encrypted import and export and its log, and the secure channel. All
 still `6D00`, so the wallet reports them as unsupported rather than being told a
 comfortable lie. Two need saying twice. The secure channel would encrypt every APDU
 with a session key negotiated over ECDH to protect the wire between reader and card;
@@ -367,7 +367,7 @@ clone-to-another-card is refused rather than quietly done in plaintext.
 One flow does not work, and it is not this package's fault.
 `ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value
 into `(response, sw1, sw2)`, but on the pysatochip backend that method returns the
-card's authentikey — so a *successful* import is what raises `TypeError`. The card
+card's authentikey, so a *successful* import is what raises `TypeError`. The card
 takes the seed; the screen reports failure. See `test/test_cards_seed.py`, which
 asserts it so the day upstream fixes it is not a silent one.
 
@@ -378,14 +378,14 @@ asserts it so the day upstream fixes it is not a silent one.
 Not a hardware seam, but the same problem in a different place.
 `QRDisplayScreen` puts every pixel of its output inside a thread and its `_run()`
 does nothing but wait for a button. With no threads, every QR the wallet wants to
-*show* comes out blank — exported xpubs, signed PSBTs, SeedQR backups, addresses.
+*show* comes out blank: exported xpubs, signed PSBTs, SeedQR backups, addresses.
 The flow appears to work and hands back an empty screen.
 
 The same trick as the camera preview applies: run SeedSigner's own loop body one
 pass at a time. Its last statement is a sleep sized to hold each frame for a sixth
 of a second, so one pass is exactly one animation frame at the intended rate, and
 animated QRs advance on their own without a timer. The pump hangs off `wait_for`
-rather than `_run`, because waiting for a button is all `_run` does — so the
+rather than `_run`, because waiting for a button is all `_run` does, so the
 brightness adjustment, the tip toast, the encoder's frame sequence and the exit
 conditions all stay upstream's.
 
@@ -404,19 +404,19 @@ Raspberry Pi. These are small, but each one is a hard failure without it:
 - **`pycryptodomex` is `pycryptodome` under another name.** A meta path finder
   maps `Cryptodome.*` onto `Crypto.*`.
 - **`hashlib.pbkdf2_hmac` does not exist.** It lives in `_hashlib`, the OpenSSL
-  binding, which this build does not have — and it sits directly on the path from
+  binding, which this build does not have, and it sits directly on the path from
   a mnemonic to seed bytes, so without it loading any seed at all fails. pycryptodome's
   PBKDF2 is borrowed rather than hand-rolling the derivation.
 - **No processes.** Several helpers shell out to a faster native tool and fall back
   to pure Python when the binary is missing; `qr.py` does it with `qrencode`.
   Emscripten raises `OSError` where those fallbacks catch `FileNotFoundError`, so
-  `subprocess` is patched to report the binary as absent — which is both true here
+  `subprocess` is patched to report the binary as absent, which is both true here
   and the case they already handle.
 - **No OpenCV, no numpy.** `decode_qr` imports numpy inside a `try` that starts
   with `import cv2`, and opencv is not loaded, so `np` is `None` either way. The
   browser decode is what makes that harmless.
 
-Under `?debug=1` the shim also traces the screen lifecycle — every `View.run`,
+Under `?debug=1` the shim also traces the screen lifecycle: every `View.run`,
 every `BaseScreen.display`, every thread start and every long sleep. That trace is
 how you locate a stall, and it is what the browser tests assert against. Without
 the flag, `js_log` builds nothing and posts nothing.
@@ -426,7 +426,7 @@ the flag, `js_log` builds nothing and posts nothing.
 1. `wallet.html` checks `crossOriginIsolated`. If the headers are missing it stops
    here and says so.
 2. It allocates the three shared buffers, mounts the device art and the card tray,
-   starts the worker and posts one `init` message — the only message the worker
+   starts the worker and posts one `init` message, the only message the worker
    will ever receive, because after this it is inside Python.
 3. The worker loads Pyodide, then the three binary packages it needs: Pillow,
    pycryptodome, cryptography.
@@ -434,7 +434,7 @@ the flag, `js_log` builds nothing and posts nothing.
    `browser_*.py` shims and writes them alongside.
 5. It runs the boot shim: display config, threads, crypto aliases, the display
    driver, the button patches, the camera, the QR pump, the card tray.
-6. It calls `Controller.get_instance().start()` — upstream's own entry point —
+6. It calls `Controller.get_instance().start()` (upstream's own entry point),
    which blocks for the lifetime of the worker.
 
 The camera stays idle until the wallet asks for it, so nothing prompts for

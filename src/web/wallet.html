@@ -73,16 +73,16 @@
         Web Worker. The wallet code itself is unmodified; only the four places it
         reaches for hardware are replaced.</p>
         <ul>
-          <li><strong>Display</strong> — the driver hands raw RGB frames to the page,
+          <li><strong>Display:</strong> the driver hands raw RGB frames to the page,
           which paints them into the canvas above.</li>
-          <li><strong>Buttons</strong> — the worker blocks on the wallet's main loop and
+          <li><strong>Buttons:</strong> the worker blocks on the wallet's main loop and
           can never answer a message, so keys cross on a SharedArrayBuffer and wake it
           with Atomics.</li>
-          <li><strong>Camera</strong> — your webcam via getUserMedia. SeedSigner reads QR
+          <li><strong>Camera:</strong> your webcam via getUserMedia. SeedSigner reads QR
           codes with pyzbar, a C library with no WebAssembly build, so decoding is done
           by the browser's BarcodeDetector or by jsQR and the bytes are handed to the
           unmodified decoder.</li>
-          <li><strong>Smartcard</strong> — simulated SeedKeeper and Satochip cards that
+          <li><strong>Smartcard:</strong> simulated SeedKeeper and Satochip cards that
           answer real APDUs, because browsers have no smartcard API at all.</li>
         </ul>
         <p>Nothing leaves your browser. The page declares a content security policy that
@@ -101,7 +101,7 @@
   <canvas id="screen" width="320" height="240"></canvas>
   <p id="status">starting…</p>
   <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
-  element. Never enter a seed phrase you rely on — use a BIP39 test vector.</p>
+  element. Never enter a seed phrase you rely on; use a BIP39 test vector.</p>
   <div id="cardtray"></div>
   <p class="hint"><a id="debuglink" href="?debug=1">debug</a></p>
   <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>

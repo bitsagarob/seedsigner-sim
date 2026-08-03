@@ -20,7 +20,7 @@ Behaviour that helps:
 - Taking criticism of your work gracefully, and giving it about the work rather
   than the person.
 - Being clear about what you know, what you assume and what you have actually
-  tested — this is a project about bitcoin keys, and confident guesses do real
+  tested: this is a project about bitcoin keys, and confident guesses do real
   damage.
 - Assuming the other person is trying to be useful.
 
@@ -48,8 +48,8 @@ of conduct, and will explain their reasons when appropriate.
 
 ## Scope
 
-This code of conduct applies in all project spaces — issues, pull requests,
-discussions and code review — and also when an individual is officially
+This code of conduct applies in all project spaces (issues, pull requests,
+discussions and code review) and also when an individual is officially
 representing the project in public.
 
 ## Reporting
@@ -58,7 +58,7 @@ Report abusive, harassing or otherwise unacceptable behaviour to the maintainers
 of [bitsagarob/seedsigner-sim](https://github.com/bitsagarob/seedsigner-sim). For
 anything that needs to stay private, GitHub's private vulnerability reporting
 (**Security → Report a vulnerability**) is the one private channel this repository
-has, and it is fine to use it for a conduct report — say at the top that it is not
+has, and it is fine to use it for a conduct report; say at the top that it is not
 a security issue.
 
 All complaints will be reviewed and investigated promptly and fairly. Maintainers

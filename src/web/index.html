@@ -77,7 +77,7 @@
 <body>
 
 <h1>SeedSigner simulator</h1>
-<p class="lead">The real SeedSigner firmware — the actual Python from the device —
+<p class="lead">The real SeedSigner firmware, the actual Python from the device,
 running in this browser tab. Its screen is a canvas, its buttons are your keyboard,
 and its camera is your webcam.</p>
 
@@ -87,36 +87,36 @@ and its camera is your webcam.</p>
   of the machine.</p>
   <p>Treat every key it shows you as public, and
   <strong>never enter a seed phrase you rely on</strong>. If you want something to
-  type in, use a BIP39 test vector — they exist for exactly this.</p>
+  type in, use a BIP39 test vector; they exist for exactly this.</p>
 </div>
 
 <p class="start"><a class="button" href="wallet.html">Open the simulator</a></p>
 <p class="after">First load fetches about 30 MB (Python and the wallet) and takes a
 few seconds. After that it runs offline. Arrow keys move, Enter selects,
-<code>1</code> <code>2</code> <code>3</code> are the side buttons — or click the
+<code>1</code> <code>2</code> <code>3</code> are the side buttons, or click the
 buttons on the device.</p>
 
 <h2>What it actually is</h2>
 <p>Not a re-creation. The wallet's own Python is executed by
-<a href="https://pyodide.org" rel="noopener">Pyodide</a> — CPython compiled to
-WebAssembly — inside a Web Worker, and the firmware's own entry point is what runs.
+<a href="https://pyodide.org" rel="noopener">Pyodide</a> (CPython compiled to
+WebAssembly) inside a Web Worker, and the firmware's own entry point is what runs.
 The menus, the seed handling, the PSBT parsing and the QR encoders are all
 upstream's, unmodified.</p>
 <p>Only the four places the firmware reaches for hardware are replaced, from the
 outside:</p>
 <ul>
-  <li><strong>Display</strong> — the panel driver is swapped beneath SeedSigner's
+  <li><strong>Display:</strong> the panel driver is swapped beneath SeedSigner's
   own renderer, and raw frames are painted into a canvas.</li>
-  <li><strong>Buttons</strong> — the worker is blocked inside the wallet's main loop
+  <li><strong>Buttons:</strong> the worker is blocked inside the wallet's main loop
   and can never answer a message, so keypresses cross on shared memory and wake it.</li>
-  <li><strong>Camera</strong> — your webcam. SeedSigner reads QR codes with a C
+  <li><strong>Camera:</strong> your webcam. SeedSigner reads QR codes with a C
   library that has no WebAssembly build, so the browser decodes the image and hands
   the raw bytes to the firmware's own unmodified decoder.</li>
-  <li><strong>Smartcard</strong> — simulated SeedKeeper and Satochip cards answering
+  <li><strong>Smartcard:</strong> simulated SeedKeeper and Satochip cards answering
   real APDUs, because browsers have no smartcard API at all.</li>
 </ul>
 <p>The wallet is pinned to a single upstream commit, and a build script in the
-repository rebuilds it from that commit — so the claim that this is the real
+repository rebuilds it from that commit, so the claim that this is the real
 firmware is one you can check rather than take on trust.</p>
 
 <h2>What works, and what does not</h2>
@@ -139,7 +139,7 @@ server to send anything to.</p>
 <p>It needs to be served with <code>Cross-Origin-Opener-Policy: same-origin</code>
 and <code>Cross-Origin-Embedder-Policy: require-corp</code>; without them the
 browser withholds the shared memory every keypress travels on, and the wallet never
-starts. Scanning additionally needs a secure context — https, or localhost. Both are
+starts. Scanning additionally needs a secure context: https, or localhost. Both are
 covered in the repository's self-hosting notes.</p>
 
 <footer>

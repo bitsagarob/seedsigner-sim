@@ -107,7 +107,7 @@ def phase_decode(p) -> None:
     page.wait_for_timeout(1500)
     page.screenshot(path=SHOT)
     harness.save_screen(page, SCREEN)
-    print(f"  screenshot: {SHOT} — must read b2269592")
+    print(f"  screenshot: {SHOT}, must read b2269592")
     print(f"  screen:     {SCREEN}")
     browser.close()
 

@@ -13,7 +13,7 @@ a mismatch is a real report, not a nuisance. Thank you for looking.
 - The values in `UPSTREAM` at the commit you built:
 
 If the *contents* hash matches but the zip hash does not, the two builds hold the
-same files and differ only in compression — worth reporting, but not a code
+same files and differ only in compression: worth reporting, but not a code
 difference.
 
 **Your environment**

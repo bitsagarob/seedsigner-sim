@@ -21,7 +21,7 @@ afterwards; `docs/SELF-HOSTING.md` explains what ends up where.
 `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp`. Without them the document is not
 cross-origin isolated, `SharedArrayBuffer` does not exist, and every input channel
-into the wallet is gone — the page says so instead of starting. `python3 -m
+into the wallet is gone; the page says so instead of starting. `python3 -m
 http.server` will not do; `test/serve.py` exists for exactly this.
 
 The camera additionally needs a secure context, so use `127.0.0.1` or real https.
@@ -32,7 +32,7 @@ A LAN IP over plain http gives you a working wallet with no camera at all.
 Add `?debug=1` to the URL (there is a link on the page). The wallet then narrates
 itself to the console: every `View.run`, every screen `display()`, every thread the
 shim dropped or ran inline, every keypress and the decoder the camera settled on.
-Off by default, because it is noise for anyone who is not debugging — `js_log`
+Off by default, because it is noise for anyone who is not debugging; `js_log`
 builds nothing and posts nothing without the flag.
 
 That trace is also the assertion surface for the tests, so keep it accurate. If you
@@ -52,7 +52,7 @@ UPSTREAM       the commit the wallet is pinned to
 
 Read `docs/ARCHITECTURE.md` before changing anything in `src/`. The important part
 is that the worker is permanently blocked inside SeedSigner's main loop, so it can
-never receive a `postMessage` — which is why keys, camera frames and the card tray
+never receive a `postMessage`, which is why keys, camera frames and the card tray
 all cross on shared memory, and why a change that "just posts a message to the
 worker" cannot work.
 
@@ -83,7 +83,7 @@ side actually decoded. A screenshot is proof of nothing on its own.
 
 Both CI workflows run on every pull request: the suite above, and `leak_scan.py`,
 which fails the build if a tracked file names anybody's infrastructure. Run
-`python3 test/leak_scan.py` before pushing — it takes a second.
+`python3 test/leak_scan.py` before pushing; it takes a second.
 
 If you touch the scan path, `test_scan_native.py` is the one to watch. It points
 the camera at a blank wall, forces a stub `BarcodeDetector` to claim a QR on every
@@ -113,7 +113,7 @@ one is the worst thing this project could do.
 
 One change per PR, with the reasoning in the message rather than only in the diff.
 If it fixes something that used to be broken, say what was broken and how you
-reproduced it — ideally as a test that fails without the change.
+reproduced it, ideally as a test that fails without the change.
 
 By contributing you agree that your work is licensed under the MIT licence in
 [LICENSE](LICENSE).

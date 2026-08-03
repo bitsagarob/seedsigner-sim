@@ -27,7 +27,7 @@ document says it is.
 
 ## 1. Committed to this repository
 
-### jsQR 1.4.0 — Apache-2.0
+### jsQR 1.4.0, Apache-2.0
 
 * File: `src/web/jsQR.js`
 * Source: npm `jsqr@1.4.0`, the file published as `package/dist/jsQR.js`
@@ -51,7 +51,7 @@ to the wallet through `src/shims/browser_camera.py`.
 
 ## 2. Fetched by `build/fetch-assets.sh`
 
-### Pyodide 0.26.4 — MPL-2.0
+### Pyodide 0.26.4, MPL-2.0
 
 * Upstream: https://github.com/pyodide/pyodide
 * Artifact: `pyodide-core-0.26.4.tar.bz2` from the 0.26.4 GitHub release
@@ -67,7 +67,7 @@ unpacking and refuses to continue if it disagrees with its pin.
 
 `src/web/wallet-worker.js` calls `loadPackage(["Pillow", "pycryptodome",
 "cryptography"])`. Those three, and everything they depend on, are compiled
-extensions — they cannot be vendored into `wallet.zip`, because only Pyodide can
+extensions: they cannot be vendored into `wallet.zip`, because only Pyodide can
 build a CPython extension for emscripten. `fetch-assets.sh` resolves the
 dependency edges out of `pyodide-lock.json` rather than hardcoding them, and
 verifies each file against the sha256 recorded there.
@@ -88,7 +88,7 @@ Two things about that table are worth knowing rather than assuming:
   and the filename both say `1.1.1n`, but Pyodide's own build recipe for 0.26.4
   (`packages/openssl/meta.yaml`) fetches `openssl-1.1.1w.tar.gz`. The artifact
   is a build of 1.1.1w carrying a 1.1.1n label. The licence is the same either
-  way — the dual OpenSSL/SSLeay licence used throughout the 1.1.1 series — but
+  way (the dual OpenSSL/SSLeay licence used throughout the 1.1.1 series), but
   the version string in `pyodide-lock.json` should not be quoted as fact. The
   artifact itself contains only `libcrypto.so` and `libssl.so`, so there is no
   licence file inside it to read; this entry is from the OpenSSL project's own
@@ -108,7 +108,7 @@ every artifact it fetches.
 
 ### The wallet
 
-**SeedSigner — MIT**
+**SeedSigner, MIT**
 
 * Repository: https://github.com/3rdIteration/seedsigner
 * Commit: `662d9dba2327eb77d6924ae9bd62d4902bf24634` (tag `SeSi-0.8.7+ShSi-B11`)
@@ -155,10 +155,10 @@ noted.
 
 Sources for the four commit-pinned ones:
 
-* PGPy — https://github.com/3rdIteration/PGPy
-* PyGP — https://github.com/3rdIteration/pygp
-* specter-card — https://github.com/3rdIteration/specter-javacard, subdirectory `py/`
-* urtypes — https://github.com/selfcustody/urtypes, subdirectory `src/`
+* PGPy: https://github.com/3rdIteration/PGPy
+* PyGP: https://github.com/3rdIteration/pygp
+* specter-card: https://github.com/3rdIteration/specter-javacard, subdirectory `py/`
+* urtypes: https://github.com/selfcustody/urtypes, subdirectory `src/`
 
 Upstream pins these four as GitHub archive `.zip` URLs. The build script checks
 out the same commits with git instead. A GitHub archive URL names a snapshot of
@@ -175,8 +175,8 @@ the MIT notice of `pyqrnative`, which parts of it were forked from.
 `base58` and `mnemonic` are imported by the wallet but are not in upstream's
 `requirements.txt` at all:
 
-* `base58` — not imported directly by the wallet (`bip38.py` uses embit's own `base58` submodule). Shipped because upstream's environment provides it and removing it has not been tested.
-* `mnemonic` — `seedsigner/views/seed_views.py` and
+* `base58`: not imported directly by the wallet (`bip38.py` uses embit's own `base58` submodule). Shipped because upstream's environment provides it and removing it has not been tested.
+* `mnemonic`: `seedsigner/views/seed_views.py` and
   `seedsigner/views/smartcard_views.py` do `from mnemonic import Mnemonic`
 
 On a real SeedSigner these arrive as transitive dependencies. Nothing declares
@@ -187,7 +187,7 @@ they are not there.
 ### Not a dependency: the fake smartcard package
 
 `wallet.zip` also contains `smartcard/`, which is `src/smartcard/` from this
-repository. It is not third-party and it is not pyscard — it is a fake card that
+repository. It is not third-party and it is not pyscard: it is a fake card that
 deliberately shadows pyscard's module name, so that unmodified SeedSigner code
 calling `import smartcard` reaches it. It is one of the four hardware seams.
 
@@ -207,7 +207,7 @@ Leaving something out is a decision, so here is the list and the reason for each
 | `pyzbar` | Binds libzbar. `decode_qr.py` imports it inside a `try` and sets it to `None`; jsQR does the decoding. |
 | `smbus2` 0.4.3, `periphery` | I2C and GPIO. There is no `/dev/i2c` in a browser. `battery_hat.py` guards both imports, so omitting them is what makes the simulator correctly report "no battery HAT" rather than fail later trying to talk to one. |
 | `colorama` 0.4.6 | Marked Windows-only by upstream. |
-| `pyasn1` 0.6.2 | Actually **is** shipped — listed here only because it is easy to miss: `seedsigner/helpers/smartpgp/highlevel.py` imports it at module scope. |
+| `pyasn1` 0.6.2 | Actually **is** shipped, listed here only because it is easy to miss: `seedsigner/helpers/smartpgp/highlevel.py` imports it at module scope. |
 
 Three of upstream's pins are met at a different version than upstream asks for,
 because Pyodide decides: `cryptography` 42.0.5 rather than 45.0.5, `cffi` 1.16.0
@@ -222,7 +222,7 @@ differently here than on a real SeedSigner.
 
 Two of the redistributed dependencies are LGPL-3.0: **pysatochip** and **PyGP**.
 Both are shipped as unmodified Python source inside `wallet.zip`, which is what
-the licence asks for — the corresponding source is the artifact. Neither is
+the licence asks for: the corresponding source is the artifact. Neither is
 modified by this project, and both remain replaceable: the zip is a plain
 archive, and swapping either package for your own build needs nothing more than
 rebuilding it.
@@ -237,7 +237,7 @@ are shipped verbatim.
 
 `pygp` is shipped because upstream pins it, but it cannot currently be imported
 in the simulator. `pygp/connection/pcsc/__init__.py` does
-`from smartcard.scard import *`, and `scard` is pyscard's C extension — the fake
+`from smartcard.scard import *`, and `scard` is pyscard's C extension; the fake
 `smartcard/` package in this repository has no such submodule, so `import pygp`
 raises `ImportError`.
 

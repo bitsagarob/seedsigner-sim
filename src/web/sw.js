@@ -13,7 +13,7 @@
  *
  * Nothing cross-origin and nothing but GET is touched. Same-origin cached
  * responses keep their headers, so COOP/COEP survive and the page stays
- * crossOriginIsolated — without which the sim silently dies, since the worker
+ * crossOriginIsolated, without which the sim silently dies, since the worker
  * blocks inside SeedSigner's controller loop and SharedArrayBuffer is the only
  * channel that can reach it.
  */
