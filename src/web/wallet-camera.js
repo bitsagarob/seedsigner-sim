@@ -61,8 +61,13 @@
 
   // ---------------------------------------------------------------- page half
 
-  function runPage(sab) {
+  // options.source, if given, hands back a MediaStream instead of the webcam.
+  // The tutorial passes the phone mock's own canvas: the device's camera is
+  // pointed at the phone's screen, which is a picture on this page, so nothing
+  // below this line changes and no webcam permission is ever asked for.
+  function runPage(sab, options) {
     var hdr = header(sab);
+    var source = (options && options.source) || null;
     var stream = null;
     var video = null;
     var capture = null;
@@ -168,15 +173,13 @@
       }).catch(function () { return null; });
     }
 
-    function start() {
-      setState(STATES.STARTING);
+    function open() {
+      if (source) return Promise.resolve().then(source);
       if (!scope.navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         // getUserMedia is missing rather than merely refused when the page is not
         // a secure context, which over plain http on a LAN address it is not.
-        fail(new Error("no camera API here; needs https or localhost"));
-        return Promise.resolve();
+        return Promise.reject(new Error("no camera API here; needs https or localhost"));
       }
-
       return navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
@@ -184,7 +187,12 @@
           height: { ideal: CAPTURE_H },
         },
         audio: false,
-      }).then(function (opened) {
+      });
+    }
+
+    function start() {
+      setState(STATES.STARTING);
+      return open().then(function (opened) {
         stream = opened;
         video = document.createElement("video");
         video.playsInline = true;

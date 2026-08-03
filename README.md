@@ -117,13 +117,62 @@ switches to stock and back, and `?firmware=stock` is a link straight to it.
 - **The webcam really is the camera.** Same `DecodeQR`, same SeedQR / CompactSeedQR
   / PSBT / UR parsing the device does. Only the decoder underneath is the
   browser's, because there is no zbar in WebAssembly.
-- **Nothing leaves the tab.** The content security policy allows no outbound
-  connections and there is no backend to send anything to. Once loaded, it runs
-  with the network off.
+- **The wallet has no network at all, and the page has one host.** There is no
+  backend, and the content security policy names exactly one origin beyond this
+  one: `signet.bitsaga.be`, the faucet and the two read-only proof endpoints of
+  Bitsaga Signet. Nothing asks it anything unless you start the multisig
+  tutorial below, and no part of the wallet can reach it in any case. With the
+  tutorial closed, the page still runs with the network off.
 
 > If the zip hashes differ but the **contents** hash matches, the two builds hold
 > the same files and differ only in compression: some distributions ship zlib-ng.
 > That is packaging, not code; the zip's `.manifest` lists a sha256 per file.
+
+## The multisig tutorial
+
+One button under the device: **Start the multisig tutorial**. It does a whole
+2 of 3, in the page, and a visitor never navigates away and never installs
+anything.
+
+Three published BIP39 test seeds go onto the three SeedKeeper cards, one each,
+with the card's real PIN ceremony every time. The three account public keys come
+back off the cards, a 2 of 3 wallet is built from them, the faucet on **Bitsaga
+Signet** pays its first address, and a spend is signed by two of the three cards
+and confirmed on that chain. Bitsaga Signet is our own Bitcoin test network, with
+a block every thirty seconds. **These are not real bitcoin. They exist only on
+our test network, cannot be sold or sent to anyone, and are worth nothing.**
+
+**Two modes, one machine.** A step is a list of actions, and an action is a
+sentence saying what has to happen, the keys that make it happen, and how we know
+it did. Press play and it performs the middle one, narrated; take over at any
+point and you press the buttons instead, against the same evidence, so the panel
+keeps pace either way. There is one description of the flow, not two.
+
+**The coordinator is on the page**, drawn as a phone beside the device, because
+that is what it is: the thing that knows what the wallet owns and what a fee is,
+which a signing device does not.
+[`signet-coordinator.js`](src/web/signet-coordinator.js) builds the descriptor,
+derives the addresses, builds the PSBT and puts the two signatures into a
+finished transaction, all in the browser. It is a second, independent
+implementation of BIP32 public derivation, sortedmulti, P2WSH, bech32 and
+BIP174, and `test/test_tutorial.py` checks every value it produces against the
+wallet's own embit rather than against itself.
+
+**The QR exchange is shown rather than hidden**, with a caption per transfer
+saying what moved and which way. It is also not faked past the optics: a code
+the phone holds up is drawn from real modules by
+[`qr-encode.js`](src/web/qr-encode.js) onto the phone's screen and read by the
+wallet's own unmodified decoder from those pixels, and a code the device shows is
+read back off the device's canvas the same way. **Your webcam is never involved**,
+and the panel says so where you can see it.
+
+The one thing the network does not yet offer is a way to send a transaction:
+[docs/SIGNET-API.md](docs/SIGNET-API.md) has the single endpoint to add and why
+it is the only one.
+
+Worth saying once, and the tutorial says it too: holding all three keys on one
+device is fine for a demo and wrong for real funds, where the point of multisig
+is keys in different places and different hands.
 
 ## What works, and what does not
 
