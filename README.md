@@ -7,10 +7,25 @@ keyboard, and its camera is your webcam.
 > **This is a simulator, not a wallet.**
 > Everything it does happens in a browser tab, on a general-purpose computer, with
 > no secure element and no air gap. Treat every key it shows you as public.
-> **Never enter a seed phrase you rely on.** There are BIP39 test vectors for
-> exactly this; use one of those.
+> **Never enter a seed phrase you rely on.** Use a public test seed instead: a
+> throwaway phrase that holds no bitcoin and never will, published so that people
+> have something safe to test with.
 
 ![The simulator running the wallet's home screen](docs/img/device.png)
+
+A SeedSigner is an open-source Bitcoin signing device you build yourself. This is
+the software off one of them, running as a web page: not a video of it, and not a
+lookalike rebuilt to resemble it, but the same Python, drawing the same screens
+and doing the same work.
+
+That is an easy thing to say and a hard thing to believe, which is why most of
+what follows is about making it checkable rather than asking you to take it on
+trust. The copy here is tied to one specific published release of the device
+software, rather than to whatever happened to be newest. Anyone can rebuild the
+file this site serves and get one that is identical, byte for byte — and a machine
+now redoes that on every change, on a computer that has never seen the project
+before. The behaviour, meanwhile, is checked by the tests the device's own authors
+wrote, and not only by tests we wrote ourselves about somebody else's code.
 
 ## Try it
 
@@ -77,6 +92,28 @@ Nothing here patches the wallet: the four places it reaches for hardware are
 replaced from the outside, by the modules in [`src/shims/`](src/shims). That is
 the whole point of the build script, and it is the one claim worth checking
 rather than believing.
+
+**Upstream's own tests run here, against our dependency versions.** SeedSigner
+ships a 22,000-line test suite. CI clones it from the same pinned commit the
+wallet is built from and runs it
+([`upstream-tests.yml`](.github/workflows/upstream-tests.yml)) — nothing is
+vendored, no test file lives in this repository, and none of it goes anywhere
+near `wallet.zip`. Two things make that worth doing. The wallet's behaviour is
+checked by the tests written by the people who wrote the wallet, rather than only
+by tests we invented for code we did not write. And because
+`build/build-wallet-zip.sh` chooses its own versions of embit, ecdsa, pysatochip
+and the rest, this is what catches those pins drifting away from what upstream's
+code actually expects: the day they do, one of upstream's own tests goes red and
+names the behaviour that changed.
+
+To be exact about what that covers, since a vague claim here would be worse than
+none: one upstream file of 50 tests is not collected. It is
+`tests/test_smartcard_hardware.py`, which its own docstring calls
+hardware-in-the-loop and which wants a physical card reader and a blank JavaCard,
+so every one of its tests skips itself on a machine that has neither. The other
+949 run. A few of those skip themselves where something optional is missing — the
+translation files this build does not ship, for instance — and the job prints
+every skip with its reason rather than folding it into a total.
 
 **The webcam really is the camera.** Point it at a SeedQR and the wallet loads the
 seed — the same `DecodeQR`, the same SeedQR / CompactSeedQR / PSBT / UR parsing the
