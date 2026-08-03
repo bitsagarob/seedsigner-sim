@@ -335,6 +335,14 @@ step "installed the runtime into ${DEST_DIR}"
 
 step "fetching the packages the wallet loads at boot (${PYODIDE_PACKAGES[*]}) and their dependencies"
 
+# Resolved into a variable first, deliberately. Feeding the loop from a process
+# substitution would discard this command's exit status -- set -e and pipefail
+# both ignore it -- so a lock file that failed to resolve would leave the loop
+# with nothing to do and the script would go on to report success having
+# verified nothing.
+package_closure="$(lock_closure "${DEST_DIR}/pyodide-lock.json")"
+[ -n "${package_closure}" ] || die "resolved no packages from pyodide-lock.json"
+
 while read -r file_name expected; do
     [ -n "${file_name}" ] || continue
 
@@ -356,7 +364,7 @@ while read -r file_name expected; do
 
     mv -- "${WORK_DIR}/${file_name}" "${target}"
     echo "    fetched   ${file_name}"
-done < <(lock_closure "${DEST_DIR}/pyodide-lock.json")
+done <<< "${package_closure}"
 
 # ---------------------------------------------------------------------------
 # Done

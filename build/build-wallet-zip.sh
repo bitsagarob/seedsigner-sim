@@ -154,7 +154,8 @@ fi
 # Two entries are not in upstream's requirements.txt at all but are imported by
 # the wallet, so they are pinned here and flagged in THIRD-PARTY.md:
 #
-#   base58     imported by seedsigner/models/bip38.py
+#   base58     not imported directly; bip38.py uses embit's own base58
+#              submodule. Shipped because upstream's environment provides it
 #   mnemonic   imported by seedsigner/views/seed_views.py and smartcard_views.py
 #
 # ecdsa needs six, which upstream pins but the earlier hand-assembled tree was
@@ -341,7 +342,7 @@ find_license() {
             -o -iname 'LICENCE' -o -iname 'LICENCE.*' \
             -o -iname 'COPYING' -o -iname 'COPYING.*' \) \
         | awk -F/ '{ print NF "\t" $0 }' \
-        | sort -k1,1n -k2,2
+        | LC_ALL=C sort -k1,1n -k2,2
     } | sed -n '1p' | cut -f2-
 }
 

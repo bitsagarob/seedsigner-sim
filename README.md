@@ -10,6 +10,8 @@ keyboard, and its camera is your webcam.
 > **Never enter a seed phrase you rely on.** There are BIP39 test vectors for
 > exactly this; use one of those.
 
+![The simulator running the wallet's home screen](docs/img/device.png)
+
 ## Try it
 
 ```sh
@@ -51,6 +53,12 @@ build host anywhere in the output. So you can rebuild it yourself and compare th
 sha256 against the `wallet.zip` a page just served you. If they match, what you
 ran was the pinned upstream tree plus its pinned dependencies plus this
 repository's simulated smartcard package, and nothing else.
+
+If the zip hashes differ but the *contents* hash printed alongside matches, the
+two builds hold the same files and differ only in compression — some
+distributions ship zlib-ng, whose deflate output is not byte-identical to stock
+zlib. That is a packaging difference, not a code difference, and
+`wallet.zip.manifest` lists a sha256 per file so you can find out which it is.
 
 Nothing here patches the wallet: the four places it reaches for hardware are
 replaced from the outside, by the modules in [`src/shims/`](src/shims). That is
