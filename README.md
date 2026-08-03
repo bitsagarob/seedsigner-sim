@@ -84,15 +84,25 @@ the network off.
 Working: the full menu tree, seed loading by QR or by hand, passphrases, xpub
 export, PSBT loading and signing, SeedQR backup, settings, and every screen that
 draws a QR. Three simulated smartcards go in and out of the reader, can be
-initialised with a PIN, and check that PIN when asked.
+initialised with a PIN, check that PIN when asked, and will take a seed and
+derive from it — the card holds a real BIP32 master key and a real authentikey,
+and pysatochip verifies every answer it signs.
 
 Not working, and worth knowing before you go looking:
 
-- **Storing a seed on a card.** The simulated Satochip answers SELECT, GET DATA,
-  GET STATUS, SETUP and VERIFY PIN. Seed import, key derivation and card signing
-  are not implemented; those instructions come back "not supported". The
-  GlobalPlatform card-management screens report an error rather than working, for
-  a related reason — see [THIRD-PARTY.md](THIRD-PARTY.md).
+- **The wallet's own "Initialise with Seed" screen.** The card takes the seed and
+  derives from it correctly, and the tray says so, but the screen that asked for
+  it reports a failure: at the pinned tag `ToolsSatochipImportSeedView` unpacks
+  `card_bip32_import_seed()`'s return value into three, and on this backend that
+  method returns one thing — the authentikey. So a successful import is what
+  raises. That is upstream's bug, still present on their `dev` tip, and nothing
+  here works around it. Reading the seed back off the card afterwards works.
+- **Card signing.** PSBT and message signing on the card, PIN change and unblock,
+  2FA, factory reset and the card-management screens all come back "not
+  supported" — see [THIRD-PARTY.md](THIRD-PARTY.md) for the GlobalPlatform half.
+- **A card that remembers.** Card state is in memory only, so a page reload gives
+  you three factory-fresh cards. Deliberately: nothing you do here should outlive
+  the tab.
 - **microSD.** There is no card slot to emulate, so anything routed through one —
   settings surviving a reload, firmware update flows — does not happen. Settings
   live in an in-memory filesystem and reset when you reload the page.

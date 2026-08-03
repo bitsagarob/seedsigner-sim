@@ -26,7 +26,10 @@ they do when there is no card in a real one.
 """
 
 import hashlib
+import hmac
 import time
+
+from embit import bip32, ec
 
 from smartcard.Exceptions import CardConnectionException, NoCardException
 
@@ -40,14 +43,26 @@ INS_GET_DATA = 0xCA
 INS_GET_STATUS = 0x3C
 INS_SETUP = 0x2A
 INS_VERIFY_PIN = 0x42
+INS_BIP32_IMPORT_SEED = 0x6C
+INS_BIP32_GET_EXTENDED_KEY = 0x6D
+INS_BIP32_GET_AUTHENTIKEY = 0x73
+INS_BIP32_RESET_SEED = 0x77
 
 SW_OK = (0x90, 0x00)
 SW_FILE_NOT_FOUND = (0x6A, 0x82)
 SW_INS_NOT_SUPPORTED = (0x6D, 0x00)
+SW_AUTH_FAILED = (0x9C, 0x02)
 SW_OPERATION_NOT_ALLOWED = (0x9C, 0x03)
 SW_SETUP_NOT_DONE = (0x9C, 0x04)
+SW_UNAUTHORIZED = (0x9C, 0x06)
 SW_IDENTITY_BLOCKED = (0x9C, 0x0C)
+SW_INVALID_PARAMETER = (0x9C, 0x0F)
 SW_INCORRECT_P1 = (0x9C, 0x10)
+SW_BIP32_UNINITIALIZED_SEED = (0x9C, 0x14)
+SW_BIP32_ALREADY_SEEDED = (0x9C, 0x17)
+
+# What a Satochip will hold a seed of, in bytes. A BIP39 seed is 64.
+SEED_SIZES = range(16, 65)
 
 SATOCHIP_AID = [0x53, 0x61, 0x74, 0x6F, 0x43, 0x68, 0x69, 0x70]
 
@@ -90,6 +105,29 @@ def _blob(data, offset):
     return data[offset + 1:offset + 1 + length], offset + 1 + length
 
 
+def _size(length):
+    """The two-byte big-endian prefix every BIP32 answer measures a field with."""
+    return [length >> 8, length & 0xFF]
+
+
+def _signed(key, message):
+    """A message with a signature over its SHA-256 appended, length-prefixed.
+
+    Every BIP32 answer a Satochip gives is built out of these. The client does
+    not verify the signature against a key it was told; it *recovers* the key
+    from the signature and keeps the answer only if what comes back matches
+    what the message claims, so the signature is both the proof and the half of
+    the public key an x coordinate on its own leaves out.
+
+    Signing without grinding because grinding exists to keep transaction
+    signatures short, which matters nowhere here, and pure-Python secp256k1
+    under WebAssembly is slow enough without signing some of them twice.
+    """
+    signature = list(key.sign(hashlib.sha256(bytes(message)).digest(),
+                              grind=False).serialize())
+    return list(message) + _size(len(signature)) + signature
+
+
 class SimulatedCard:
     """One card: its identity, its state, and one handler per APDU it understands."""
 
@@ -104,16 +142,28 @@ class SimulatedCard:
         # PIN0, PUK0, PIN1, PUK1
         self.remaining_tries = [5, 5, 5, 5]
         self.needs_2fa = False
-        self.is_seeded = False
         self.setup_done = False
         # Both set by setup, which is the only thing that can set them: a card
         # with no PIN on it is a card no PIN can be verified against.
         self.pin0 = None
         self.pin0_tries = 0
+        # Cleared by SELECT, because a JavaCard applet loses its PIN state when
+        # it is deselected, and set by VERIFY PIN. Every BIP32 instruction below
+        # is gated on it.
+        self.pin_verified = False
+        # The two keys a seed puts on the card, and the only place the seed
+        # survives at all. Both live here and nowhere else -- no filesystem, no
+        # storage in the page -- so reloading is a factory-fresh card.
+        self.master_key = None
+        self.authentikey = None
         # A secure channel would encrypt every APDU with a session key negotiated
         # over ECDH. It protects the wire between reader and card, and here there
         # is no wire, so the card reports that it does not need one.
         self.needs_secure_channel = False
+
+    @property
+    def is_seeded(self):
+        return self.master_key is not None
 
     @property
     def uid(self):
@@ -147,6 +197,14 @@ class SimulatedCard:
             return self._setup(data)
         if cla == CLA_CARDEDGE and ins == INS_VERIFY_PIN:
             return self._verify_pin(p1, data)
+        if cla == CLA_CARDEDGE and ins == INS_BIP32_IMPORT_SEED:
+            return self._import_seed(data)
+        if cla == CLA_CARDEDGE and ins == INS_BIP32_RESET_SEED:
+            return self._reset_seed(data[:p1])
+        if cla == CLA_CARDEDGE and ins == INS_BIP32_GET_AUTHENTIKEY:
+            return self._get_authentikey()
+        if cla == CLA_CARDEDGE and ins == INS_BIP32_GET_EXTENDED_KEY:
+            return self._get_extended_key(p1, p2, data)
 
         # Unknown instruction. card_transmit() returns any status it does not
         # recognise straight to the caller, so this ends the exchange rather than
@@ -160,6 +218,7 @@ class SimulatedCard:
         and treats a non-9000 answer as "not this one", so answering honestly
         here is what makes it settle on Satochip.
         """
+        self.pin_verified = False
         if list(aid) == SATOCHIP_AID:
             return ([], *SW_OK)
         return ([], *SW_FILE_NOT_FOUND)
@@ -222,12 +281,119 @@ class SimulatedCard:
 
         if list(pin) == self.pin0:
             self.remaining_tries[0] = self.pin0_tries
+            self.pin_verified = True
             return ([], *SW_OK)
 
         self.remaining_tries[0] -= 1
+        self.pin_verified = False
         # Four bits is all the status word has for the count, and a wallet that
         # allowed more tries than that would be reporting the wrong number.
         return ([], 0x63, 0xC0 | min(self.remaining_tries[0], 0x0F))
+
+    def _bip32_refused(self):
+        """Why this card cannot answer a BIP32 question, or None if it can.
+
+        All four instructions below are gated the same way, and each answer is
+        one pysatochip recognises: 0x9C06 in particular is not an error to the
+        client, it is card_transmit() being told to verify the PIN it has cached
+        and send the whole command again.
+        """
+        if not self.setup_done:
+            return ([], *SW_SETUP_NOT_DONE)
+        if not self.pin_verified:
+            return ([], *SW_UNAUTHORIZED)
+        return None
+
+    def _import_seed(self, seed):
+        """Take a master seed and derive the two keys a seeded Satochip holds.
+
+        One is the BIP32 master key everything is derived from. The other is the
+        authentikey, which the card signs its answers with so that a client can
+        tell one card's derivations from another's. It is not random: its
+        private key is the first 32 bytes of HmacSha512('Bitcoin seed2', seed),
+        which is what CardConnector.get_authentikey_from_masterseed() recomputes
+        to check a card against a seed it already knows. Deriving it that way
+        here means this card's authentikey is the one a real Satochip carrying
+        this seed would have.
+        """
+        refused = self._bip32_refused()
+        if refused is not None:
+            return refused
+        if self.is_seeded:
+            # A seed is imported once. Overwriting one silently is how a wallet
+            # ends up deriving from a key nobody backed up.
+            return ([], *SW_BIP32_ALREADY_SEEDED)
+        if len(seed) not in SEED_SIZES:
+            return ([], *SW_INVALID_PARAMETER)
+
+        self.master_key = bip32.HDKey.from_seed(bytes(seed))
+        self.authentikey = ec.PrivateKey(
+            hmac.new(b"Bitcoin seed2", bytes(seed), hashlib.sha512).digest()[:32])
+        _say(f"{self.label} seeded with {len(seed)} bytes, master fingerprint "
+             f"{self.master_key.my_fingerprint.hex()}")
+        return self._get_authentikey()
+
+    def _reset_seed(self, pin):
+        """Forget the seed, if the PIN sent with the command is the right one.
+
+        The PIN travels in this command rather than being taken from an earlier
+        VERIFY PIN, because this is the instruction that destroys the key.
+        """
+        refused = self._bip32_refused()
+        if refused is not None:
+            return refused
+        if list(pin) != self.pin0:
+            return ([], *SW_AUTH_FAILED)
+        if not self.is_seeded:
+            return ([], *SW_BIP32_UNINITIALIZED_SEED)
+
+        self.master_key = None
+        self.authentikey = None
+        _say(f"{self.label} seed erased")
+        return ([], *SW_OK)
+
+    def _get_authentikey(self):
+        """[coordx_size(2) | coordx | sig_size(2) | sig], signed by itself."""
+        refused = self._bip32_refused()
+        if refused is not None:
+            return refused
+        if not self.is_seeded:
+            return ([], *SW_BIP32_UNINITIALIZED_SEED)
+
+        coordx = list(self.authentikey.sec()[1:])
+        return (_signed(self.authentikey, _size(len(coordx)) + coordx), *SW_OK)
+
+    def _get_extended_key(self, depth, option_flags, data):
+        """[chaincode | coordx_size(2) | coordx | sig | authentikey's sig].
+
+        Two signatures, the second over everything the first one produced. The
+        derived key signs to prove the coordx is its own, and the authentikey
+        signs the lot to prove the derivation came from this card;
+        parse_bip32_get_extendedkey() rejects the answer unless the key it
+        recovers from that second signature is the authentikey it already holds,
+        which is how a client notices it is talking to a different card.
+
+        The top bit of coordx_size is the card asking to be sent back the y
+        coordinate it could not spare the time to compute. There is no time to
+        spare here, so it is never set and INS 0x74 never arrives.
+        """
+        refused = self._bip32_refused()
+        if refused is not None:
+            return refused
+        if not self.is_seeded:
+            return ([], *SW_BIP32_UNINITIALIZED_SEED)
+        if option_flags & 0x06:
+            # 0x02 asks for the private key, which a Satochip does not export at
+            # all, and 0x04 is BIP85. Neither is implemented, and neither is
+            # reachable from this wallet.
+            return ([], *SW_INS_NOT_SUPPORTED)
+
+        path = [int.from_bytes(bytes(data[i:i + 4]), "big")
+                for i in range(0, 4 * depth, 4)]
+        child = self.master_key.derive(path)
+        coordx = list(child.sec()[1:])
+        message = list(child.chain_code) + _size(len(coordx)) + coordx
+        return (_signed(self.authentikey, _signed(child.key, message)), *SW_OK)
 
     def _get_status(self):
         """The 12-byte status blob card_get_status() unpacks by position."""

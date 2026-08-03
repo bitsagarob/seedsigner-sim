@@ -19,5 +19,5 @@ tag    = SeSi-0.8.7+ShSi-B11
 # The wallet.zip that build/build-wallet-zip.sh produces from the pin above.
 # Rebuild it yourself and compare; if these differ, something between that commit
 # and the file you were served is not what it claims to be.
-wallet_zip_sha256      = 7abd9c8300bd3e16a5e7aa8a4562c3cbdf286e2d5118966f88ecd5f7a499b1ab
-wallet_zip_contents_sha256 = cc63332b9ab1c2f07044919389dfd3e33dee683d866a0417c2a31ae4888da401
+wallet_zip_sha256      = 7dcd4a73e4a2dca401fee86c95b40df03df37ca35236d9055aa6cea08e84340a
+wallet_zip_contents_sha256 = 0486265c54216156c12e664bec76eb1f414ad487fdea58881cd2b34273179699

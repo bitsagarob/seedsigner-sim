@@ -29,7 +29,8 @@ downloads the Pyodide runtime and builds `wallet.zip` from the pinned upstream
 commit, which takes a few minutes; later runs reuse both.
 
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
-`tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`, `cards_browser`:
+`tray_layout`, `scan_seedqr`, `scan_compact`, `scan_native`, `cards_browser`,
+`cards_seed`:
 
     python3 test/run.py scan          # everything with "scan" in the name
     python3 test/run.py leak          # just the leak scanner
@@ -69,8 +70,13 @@ and every entry says why it is there.
 **`test_cards.py`** — drives the pyscard stand-in in `src/smartcard` directly, no
 browser: three distinct cards with distinct UIDs, an empty reader that raises
 rather than inventing a card, state that survives a trip out of the reader, and
-the right state published back to the tray. Two seconds, and it says why
-`test_cards_browser.py` failed before that one has finished booting.
+the right state published back to the tray. Then a seed: refused before the PIN
+is verified, refused if it is too short, refused a second time, and once accepted,
+answering with keys that pysatochip's own `CardDataParser` — read out of
+`wallet.zip`, so it is the copy the browser runs — recovers a public key from.
+The card's `m/84'/0'/0'` has to equal the same seed derived outside it, and its
+master fingerprint has to be the test vector's. Two seconds, and it says why the
+browser tests failed before either has finished booting.
 
 **`test_tray_layout.py`** — the card tray as a control: three cards side by side
 at a narrow viewport with no horizontal scrollbar, the accent and lift that show
@@ -111,6 +117,21 @@ hang, Card A reaches the Python side with Card A's UID, Card B with a different
 one, and Card A put back is still the same card. The UID in the log is the one
 pysatochip derived from the APDUs the card answered, so it is evidence about what
 the wallet saw rather than about what was clicked.
+
+**`test_cards_seed.py`** — the whole save-a-seed path through the wallet's own
+screens: initialise a blank card with a PIN, scan the BIP39 test vector, hand it
+to the card, then come back later — new connector, new applet selection, new PIN
+— and read extended keys back off it into a wallet descriptor. Two independent
+oracles: the card announces the master fingerprint it derived, which has to be
+the vector's `b2269592`, and the wallet announces the screens it reached, where
+`SeedExportXpubDetailsScreen` is only reachable if pysatochip recovered the right
+key from *both* signatures on *every* answer, since it raises otherwise.
+
+One of its checks asserts a bug on purpose. At the pinned tag the import screen
+cannot report success — `card_bip32_import_seed()` returns the authentikey and
+the view unpacks it as `(response, sw1, sw2)` — so a successful import is what
+raises `TypeError`. The card is seeded either way. The check is there so that the
+day upstream fixes it, this fails and says so.
 
 ## Supporting files
 

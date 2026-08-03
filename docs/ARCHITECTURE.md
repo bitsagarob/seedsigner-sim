@@ -243,7 +243,29 @@ the APDU level:
 | `GET STATUS` (`B0 3C`) | the 12-byte status blob: versions, PIN tries left, seeded, setup done, secure channel |
 | `SETUP` (`B0 2A`) | takes the PIN and becomes an initialised card; once per card |
 | `VERIFY PIN` (`B0 42`) | checks PIN0, spends a try when wrong, reports the count left in the `63Cx` status word |
+| `BIP32 IMPORT SEED` (`B0 6C`) | takes a master seed and derives the BIP32 master key and the authentikey from it; once per card |
+| `BIP32 RESET SEED` (`B0 77`) | forgets both again, if the PIN sent with the command is right |
+| `BIP32 GET AUTHENTIKEY` (`B0 73`) | the authentikey's x coordinate, signed by the authentikey |
+| `BIP32 GET EXTENDED KEY` (`B0 6D`) | a derived public key and chaincode, signed by the derived key and then by the authentikey |
 | anything else | `6D00`, "not supported" |
+
+The seed is where the interesting part is. A Satochip does not hand back what it
+was given: it answers with a key and a signature, and pysatochip *recovers* the
+signing key from that signature and keeps the answer only if it matches what the
+message claimed. So the card has to hold real keys and really sign with them, and
+it does — `embit` derives BIP32 and signs, and the authentikey's private key is
+the first 32 bytes of `HmacSha512('Bitcoin seed2', seed)`, which is where a real
+Satochip's comes from too. That makes the authentikey this card reports the one a
+physical Satochip carrying the same seed would report.
+
+Both keys live in the card object and nowhere else. There is no filesystem, no
+`localStorage`, no `IndexedDB`: reloading the page is a factory-fresh card, which
+is the behaviour a simulator that nobody should trust with a real seed ought to
+have. The BIP32 instructions are also gated on a verified PIN, cleared whenever
+the applet is selected, exactly as a JavaCard applet loses its PIN state when it
+is deselected. Answering `9C06` there is not an error to the client: it is
+`card_transmit()` being told to verify the PIN it cached and send the command
+again.
 
 There are three cards because a user needs to tell one from another: put a PIN on
 Card A, check Card B is still blank, come back and find Card A as it was left. They
@@ -265,9 +287,20 @@ connection is to a *card*, not to a reader: transmitting on a connection whose c
 has been pulled raises, rather than letting a flow run to completion against a card
 the user is holding in their hand.
 
-**Not implemented:** seed import (`BIP32_IMPORT_SEED`), key derivation, signing,
-PIN change and unblock, 2FA, and the secure channel. A card here can be
-initialised and its PIN verified; it cannot yet hold a seed.
+**Not implemented:** signing (`SIGN_TRANSACTION`, `SIGN_MESSAGE`), private-key and
+BIP85 export, PIN change and unblock, 2FA, card label and NDEF, factory reset, and
+the secure channel — all still `6D00`, so the wallet reports them as unsupported
+rather than being told a comfortable lie. The secure channel is the one that needs
+saying twice: it would encrypt every APDU with a session key negotiated over ECDH
+to protect the wire between reader and card, there is no wire here, and the card
+says so in `GET STATUS` so pysatochip never wraps anything.
+
+One flow does not work, and it is not this package's fault.
+`ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value
+into `(response, sw1, sw2)`, but on the pysatochip backend that method returns the
+card's authentikey — so a *successful* import is what raises `TypeError`. The card
+takes the seed; the screen reports failure. See `test/test_cards_seed.py`, which
+asserts it so the day upstream fixes it is not a silent one.
 
 ## The fifth module: screens that show a QR
 
