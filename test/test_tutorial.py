@@ -255,6 +255,17 @@ def wait_instruction(page, contains, timeout=90):
                          f"{panel(page, '.tut-do')!r} on {panel(page, '.tut-step')!r}")
 
 
+def next_instruction(page, after, timeout=180):
+    """Wait for the panel to ask for something else, and say how long that took."""
+    started = time.time()
+    while time.time() - started < timeout:
+        text = panel(page, ".tut-do")
+        if text and text != after:
+            return text, time.time() - started
+        page.wait_for_timeout(100)
+    raise AssertionError(f"the panel sat on {after!r} for {timeout}s")
+
+
 def boot(context, log_lines, query="tutorial=1&debug=1"):
     page = context.new_page()
     log = Log(page)
@@ -391,18 +402,81 @@ def main() -> int:
 
         # Handing back mid-step: same steps, same evidence, different driver.
         page.locator("#tutorial button", has_text="Let it drive").click()
-        deadline = time.time() + 120
+        deadline = time.time() + 240
         while time.time() < deadline and "Card B" not in panel(page, ".tut-step"):
             page.wait_for_timeout(500)
         check("handing back mid-step lets it finish the card on its own",
               "Card B" in panel(page, ".tut-step"), panel(page, ".tut-step"))
+        # Every step starts its line again from nothing, so this waits for the
+        # first action of the new one rather than reading the line at the
+        # boundary and calling an honest zero a missing bar.
+        deadline = time.time() + 90
+        while time.time() < deadline and bar_width(page) == 0:
+            page.wait_for_timeout(500)
         check("and the progress line comes back with it", bar_width(page) > 0,
               f"{bar_width(page)}px")
         page.close()
 
-        # --- the three ways Bitsaga Signet can let it down --------------------
-        print("\nfailure states")
+        # --- who sets the pace -----------------------------------------------
+        #
+        # Self driving used to run the whole ceremony in two minutes, which is
+        # about a third of a second per instruction: too fast to read, and there
+        # was nothing to do about it but reload. So the run now waits for the
+        # sentence it has just put up to be read, and the panel has controls for
+        # anyone that does not suit.
+        print("\npacing, and the controls over it")
         page, log = boot(context, logs)
+        page.locator("#tutorial button", has_text="Play").click()
+
+        instruction, _ = next_instruction(page, "")
+        gaps = []
+        for _ in range(3):
+            instruction, waited = next_instruction(page, instruction)
+            gaps.append(waited)
+        check("an instruction is left up long enough to be read",
+              min(gaps) > 1.0, " ".join(f"{gap:.1f}s" for gap in gaps))
+
+        page.locator("#tutorial button", has_text="Pause").click()
+        # The action already in flight finishes first -- pausing happens between
+        # actions and never inside one -- so what is asserted is that everything
+        # then goes still and stays still, rather than that it stopped on the
+        # exact instruction that was up when the button was pressed.
+        still, held, bar = 0, None, -1
+        deadline = time.time() + 90
+        while time.time() < deadline and still < 8:
+            page.wait_for_timeout(500)
+            now, width = panel(page, ".tut-do"), bar_width(page)
+            if (now, round(width)) == (held, round(bar)):
+                still += 0.5
+            else:
+                still, held, bar = 0, now, width
+        check("Pause stops it, and it stays stopped", still >= 8,
+              f"{still}s still on {held[:50]!r}")
+        check("and the progress line keeps what has actually happened", bar > 0,
+              f"{bar:.0f}px")
+
+        page.locator("#tutorial button", has_text="Step").click()
+        stepped, _ = next_instruction(page, held)
+        page.wait_for_timeout(8000)
+        check("Step takes exactly one action and stops again",
+              panel(page, ".tut-do") == stepped, panel(page, ".tut-do")[:60])
+        check("and the button says it is paused again",
+              page.locator("#tutorial button", has_text="Play").count() == 1)
+
+        page.locator("#tutorial button", has_text="Play").click()
+        after, _ = next_instruction(page, stepped)
+        check("Play carries on from there", bool(after), after[:60])
+
+        # --- the three ways Bitsaga Signet can let it down --------------------
+        #
+        # On the same page and the same run: reaching the faucet means driving
+        # the six card steps first, and every reading pause on the way is one
+        # this file has just measured. So this run turns them off. Nothing else
+        # about it changes, and test_tutorial_live.py drives the whole thing at
+        # the pace a visitor gets.
+        print("\nfailure states")
+        page.evaluate("() => { window.WalletTutorial.current.pace = "
+                      "() => Promise.resolve(); }")
         broken = {"how": "empty"}
 
         def faucet(route):
@@ -423,7 +497,6 @@ def main() -> int:
                     pass
 
         context.route(f"{API}/**", faucet)
-        page.locator("#tutorial button", has_text="Play").click()
 
         first = True
         for how, expect, name in [

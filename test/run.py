@@ -46,6 +46,7 @@ SUITE = [
     ("leak_scan", ["leak_scan.py"], False),
     ("cards", ["test_cards.py"], False),
     ("tray_layout", ["test_tray_layout.py"], True),
+    ("device", ["test_device.py"], True),
     ("firmware", ["test_firmware.py"], True),
     ("build_info", ["test_build_info.py"], True),
     ("settings", ["test_settings.py"], True),

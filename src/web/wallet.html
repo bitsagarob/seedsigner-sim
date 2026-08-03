@@ -156,6 +156,58 @@
      its content and takes the page sideways with it on a narrow phone. The
      cards already know how to shrink; they just have to be told to. */
   #cardtray { max-width: 100%; }
+  /* The device, on its own, filling the screen.
+
+     The shell is landscape and about twice as wide as it is tall. Fitted to a
+     360 pixel width it draws keys 21 pixels across, and no amount of page
+     layout changes that: taking every other thing off the page and giving the
+     device all of it is worth one pixel. A landscape object only gets thumb
+     sized keys along a phone's long side, so that is what this does -- the
+     device is laid along the viewport's longer axis, whichever way the phone is
+     being held, and the keys land at about 46 pixels either way.
+
+     Turned sideways it is simply height-bound and upright. Held upright it is
+     rotated, which is the part worth arguing about: it says "turn me" in the
+     one way nobody has to read, and turning the phone is then correct whether
+     or not rotation is locked. A phone with rotation locked has no other way to
+     get here at all, and that is not a rare setting.
+
+     A mode rather than a breakpoint, because the card tray, the tutorial panel
+     and the technical details are all things a visitor still needs: they are
+     one press away rather than gone. Not the Fullscreen API, which an iPhone
+     offers for nothing but a video, so it would work in the one place it is
+     least needed. */
+  #fullscreen {
+    display: none; font: inherit; font-size: .9em; color: #8b939e;
+    background: #1d2026; border: 1px solid #2a2e35; border-radius: 5px;
+    padding: .25rem .7rem; cursor: pointer;
+  }
+  #fullscreen:hover { color: #d7dbe0; border-color: #3a3f47; }
+  #fullscreen[aria-pressed=true] { color: #f7931a; border-color: #f7931a; background: #16181c; }
+  #fullscreen:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
+  @media (max-width: 46rem), (max-height: 30rem) {
+    #fullscreen { display: inline-block; }
+  }
+  body.solo { overflow: hidden; }
+  body.solo::before { content: ""; position: fixed; inset: 0; z-index: 49; background: #0b0c0e; }
+  body.solo #device {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 50;
+    /* Outranks the natural width seedsigner-device.js sets inline, which is
+       right for a shell sitting in a page and wrong for one that is the page.
+       Small viewport units, so the fit does not jump about as the phone's own
+       browser bars come and go. */
+    width: min(100svw, calc(100svh * var(--ssd-aspect, 2))) !important;
+    max-width: none !important;
+  }
+  /* Upright phone: the same fit against swapped axes, because the shell is
+     turned across it. */
+  @media (orientation: portrait) {
+    body.solo #device {
+      transform: translate(-50%, -50%) rotate(90deg);
+      width: min(100svh, calc(100svw * var(--ssd-aspect, 2))) !important;
+    }
+  }
+  body.solo #fullscreen { position: fixed; z-index: 60; top: .4rem; right: .4rem; }
   @media (max-width: 30rem) {
     body { padding: 1rem .75rem; gap: .75rem; }
     h1 { font-size: 1.05rem; }
@@ -215,8 +267,16 @@
       </div>
     </details>
   </header>
+  <!-- Above the device, so it is the first thing read and then scrolls out of
+       the way, rather than competing with the device for room underneath it. -->
+  <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
+  element. Never enter a seed phrase you rely on; use a public test seed, a
+  throwaway phrase that holds no bitcoin and never will.</p>
   <div id="device"></div>
   <canvas id="screen" width="320" height="240"></canvas>
+  <!-- Only offered where it is any use: on a phone, where the page around the
+       device is what is making the device small. -->
+  <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
   <div id="running">
     <div class="running-row">
       <div id="firmware-switch" role="group" aria-label="Firmware">
@@ -268,9 +328,6 @@
     </div>
   </details>
   <p id="status">starting…</p>
-  <p class="warn"><strong>Simulator.</strong> This is not a wallet and has no secure
-  element. Never enter a seed phrase you rely on; use a public test seed, a
-  throwaway phrase that holds no bitcoin and never will.</p>
   <p class="note">This is a simulator, and it starts on Testnet, so you can use it
   with <a href="/signet">Bitsaga Signet</a>, our own test network. These are not real
   bitcoin. They exist only on our test network, cannot be sold or sent to anyone, and
@@ -521,6 +578,25 @@ function paint(bytes) {
 }
 
 mountDevice(W, H);
+
+// The device on its own. Nothing about the wallet changes: the page stops
+// taking up the screen and the shell is laid along the viewport's longer side,
+// which is the whole of what makes its keys thumb sized. The same control, or
+// Escape, comes back out.
+const fullscreenButton = document.getElementById("fullscreen");
+function setSolo(on) {
+  document.body.classList.toggle("solo", on);
+  fullscreenButton.setAttribute("aria-pressed", String(on));
+  fullscreenButton.textContent = on ? "Back to the page" : "Fill the screen";
+}
+fullscreenButton.addEventListener("click", () => {
+  setSolo(!document.body.classList.contains("solo"));
+  // The wallet reads the keyboard off the document, so focus goes back to it.
+  fullscreenButton.blur();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setSolo(false);
+});
 
 // Set once the tutorial is mounted, and only then. Everything that talks to it
 // checks first, because on the resting page there is nothing there.

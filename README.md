@@ -69,7 +69,14 @@ the page cannot use `SharedArrayBuffer` and the wallet never starts.
 load the page runs offline.
 
 Arrow keys move, Enter selects, `1` `2` `3` are the three side buttons. You can
-also click the buttons on the device.
+also press the buttons drawn on the device. The screen is not one of them: a
+SeedSigner has no touchscreen, and neither has this.
+
+On a phone, **Fill the screen** under the device gives it the whole viewport and
+lays it along the phone's long side, which is the only way a landscape shell
+gets keys a thumb can hit: about 46 pixels instead of 21. Held upright it is
+turned across the screen, so turning the phone is right whether or not rotation
+is locked. The same control, or Escape, comes back out.
 
 The page opens on the smartcard fork. The **Firmware** control under the device
 switches to stock and back, and `?firmware=stock` is a link straight to it.
@@ -158,6 +165,12 @@ sentence saying what has to happen, the keys that make it happen, and how we kno
 it did. Press play and it performs the middle one, narrated; take over at any
 point and you press the buttons instead, against the same evidence, so the panel
 keeps pace either way. There is one description of the flow, not two.
+
+**It runs at reading speed**, which is not the speed the wallet can go: it waits
+for the sentence it has just put up to be read before the device moves, and a
+step's opening paragraph gets longer than an instruction. **Pause** stops it
+between actions, never inside one, and **Step** takes exactly one action and
+stops again.
 
 **The coordinator is on the page**, drawn as a phone beside the device, because
 that is what it is: the thing that knows what the wallet owns and what a fee is,

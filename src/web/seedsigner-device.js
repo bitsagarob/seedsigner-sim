@@ -40,14 +40,14 @@
   };
 
   var CSS = [
+    // No tap highlight and no selection: a thumb on a key must not paint a blue
+    // box over it or start selecting the shell.
     ".ssd-root{position:relative;display:inline-block;line-height:0;max-width:100%;",
-    "touch-action:manipulation;-webkit-tap-highlight-color:transparent}",
+    "touch-action:manipulation;-webkit-tap-highlight-color:transparent;",
+    "-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}",
     ".ssd-svg{display:block;width:100%;height:auto}",
     // Percentage geometry, so the cutout tracks the art through any resize.
     ".ssd-screen-slot{position:absolute;z-index:2;overflow:hidden;background:#000}",
-    // The screen doubles as the select key: the biggest, most obvious target on
-    // the shell, which is what a thumb goes for on a phone.
-    ".ssd-tappable{cursor:pointer;touch-action:manipulation}",
     ".ssd-screen-slot>canvas{display:block;width:100%;height:100%}",
     ".ssd-glass{position:absolute;z-index:3;pointer-events:none}",
     ".ssd-ctl{pointer-events:none}",
@@ -55,15 +55,82 @@
     // Only a live device reacts; the decorative build stays inert illustration.
     ".ssd-live .ssd-ctl{pointer-events:auto;cursor:pointer;transition:transform .07s ease-out}",
     ".ssd-live .ssd-ctl .ssd-hover{transition:opacity .13s ease}",
-    ".ssd-live .ssd-ctl:hover .ssd-hover{opacity:.2}",
-    ".ssd-live .ssd-ctl:active{transform:translateY(var(--ssd-sink,2px))}",
-    ".ssd-live .ssd-ctl:active .ssd-press{opacity:.42}",
-    ".ssd-live .ssd-ctl:active .ssd-hover{opacity:.1}",
-    ".ssd-live .ssd-ctl:active .ssd-shadow{opacity:.12}",
-    ".ssd-live .ssd-ctl:active .ssd-gloss{opacity:.2}",
+    // Hover only where there is a pointer that can hover. A touch that lands on
+    // a key would otherwise leave it lit until something else was touched.
+    "@media (hover:hover){.ssd-live .ssd-ctl:hover .ssd-hover{opacity:.2}}",
+    // Pressed is a class rather than :active, because :active under touch is
+    // whatever the browser feels like: Safari does not apply it at all without a
+    // touch handler, and every engine drops it the moment a finger drifts. The
+    // class goes on when the key is pressed and stays long enough to be seen.
+    ".ssd-live .ssd-ctl.ssd-down{transform:translateY(var(--ssd-sink,2px))}",
+    ".ssd-live .ssd-ctl.ssd-down .ssd-press{opacity:.42}",
+    ".ssd-live .ssd-ctl.ssd-down .ssd-hover{opacity:.1}",
+    ".ssd-live .ssd-ctl.ssd-down .ssd-shadow{opacity:.12}",
+    ".ssd-live .ssd-ctl.ssd-down .ssd-gloss{opacity:.2}",
     "@media (prefers-reduced-motion:reduce){.ssd-live .ssd-ctl,",
     ".ssd-live .ssd-ctl .ssd-hover{transition:none}}",
   ].join("\n");
+
+  // How long a key stays visibly down. A tap can be over in 40 milliseconds,
+  // which is not long enough to see, so the state is held to this floor.
+  var PRESSED_MS = 130;
+
+  /**
+   * One press per finger, from a drawn key and nowhere else.
+   *
+   * pointerdown rather than click: a key has to answer where a thumb lands,
+   * and click arrives up to 300ms later on a phone. Nothing listens for mouse
+   * events alongside it either, because a touch synthesises a mousedown of its
+   * own afterwards and a device that answered both would send every key twice;
+   * preventDefault here stops that synthesis, and with it the long-press menu
+   * and the text selection, none of which a hardware button has.
+   *
+   * The pointer is remembered until it lifts, so a finger held on a key is one
+   * press and no repeat -- the real device does not auto-repeat either -- and a
+   * second finger arriving while the first is down is not a second press.
+   */
+  function bindControls(svgEl, onKey) {
+    var pointer = null;    // the pointer holding a key down, if any
+    var key = null;        // and the key it is holding
+    var since = 0;
+
+    function release() {
+      if (!key) return;
+      var released = key, waited = Date.now() - since;
+      key = null;
+      pointer = null;
+      if (waited >= PRESSED_MS) released.classList.remove("ssd-down");
+      else setTimeout(function () { released.classList.remove("ssd-down"); },
+                      PRESSED_MS - waited);
+    }
+
+    function begin(event) {
+      if (event.isPrimary === false) return;
+      var hit = event.target.closest && event.target.closest("[data-ssd-channel]");
+      if (!hit) return;
+      event.preventDefault();
+      // Any press still open ends here rather than wedging the device shut if
+      // its pointerup was never delivered.
+      release();
+      key = hit;
+      pointer = event.pointerId;
+      since = Date.now();
+      hit.classList.add("ssd-down");
+      onKey(parseInt(hit.getAttribute("data-ssd-channel"), 10));
+    }
+
+    if (global.PointerEvent) {
+      svgEl.addEventListener("pointerdown", begin);
+      // On the window: a finger that slides off the key before it lifts still
+      // ends the press, and so does the browser taking the gesture away.
+      var end = function (event) { if (pointer === event.pointerId) release(); };
+      global.addEventListener("pointerup", end);
+      global.addEventListener("pointercancel", end);
+    } else {
+      svgEl.addEventListener("mousedown", begin);
+      global.addEventListener("mouseup", release);
+    }
+  }
 
   function injectStyle() {
     if (doc.getElementById(STYLE_ID)) return;
@@ -501,27 +568,17 @@
     // A landscape shell handed a whole desktop viewport is far wider than anyone
     // wants, so callers can cap it; either way it still shrinks to fit a phone.
     container.style.maxWidth = o.maxWidth ? "min(" + o.maxWidth + ",100%)" : "100%";
+    // The shell's own proportions, published for a page that wants to fit it to
+    // a viewport rather than only to a width.
+    container.style.setProperty("--ssd-aspect", n(L.viewW / L.viewH));
 
     var svgEl = container.querySelector(".ssd-svg");
     var slotEl = container.querySelector(".ssd-screen-slot");
-    if (live && onKey) {
-      slotEl.classList.add("ssd-tappable");
-      slotEl.setAttribute("role", "button");
-      slotEl.setAttribute("aria-label", "Select");
-      slotEl.addEventListener(global.PointerEvent ? "pointerdown" : "mousedown",
-        function (event) {
-          event.preventDefault();
-          onKey(CHANNEL.select);
-        });
-
-      var name = global.PointerEvent ? "pointerdown" : "mousedown";
-      svgEl.addEventListener(name, function (event) {
-        var hit = event.target.closest && event.target.closest("[data-ssd-channel]");
-        if (!hit) return;
-        event.preventDefault();
-        onKey(parseInt(hit.getAttribute("data-ssd-channel"), 10));
-      });
-    }
+    // The screen is not a control. It used to be the select key, on the grounds
+    // that it is the biggest target on the shell, and it surprised everybody who
+    // touched it: on the home menu a tap anywhere opened the camera. A
+    // SeedSigner has no touchscreen, so only the drawn keys answer here either.
+    if (live && onKey) bindControls(svgEl, onKey);
 
     return {
       svg: svgEl,

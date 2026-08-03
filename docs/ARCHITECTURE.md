@@ -120,6 +120,12 @@ dimensions, and the page resizes the canvas and re-renders the device art to mat
 
 Patched inline in [`src/web/wallet-worker.js`](../src/web/wallet-worker.js).
 
+A press reaches the page from two places and no others: a key on the document,
+and a pointer landing on one of the drawn keys of the device art. The screen is
+not one of them -- a SeedSigner has no touchscreen -- and a pointer that is
+already holding a key down cannot start a second press, so a held finger sends
+one press and no repeat, exactly as a hardware button does.
+
 An 8-byte `SharedArrayBuffer` viewed as `Int32Array`: slot 0 is "a key is
 waiting", slot 1 is which one. The page stores the keycode, stores 1, notifies.
 The worker's `js_wait_for_key` parks on `Atomics.wait(keyBuffer, 0, 0)`, reads the

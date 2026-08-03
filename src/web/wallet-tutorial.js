@@ -60,6 +60,27 @@
   var NOT_REAL = "These are not real bitcoin. They exist only on our test "
                + "network, cannot be sold or sent to anyone, and are worth nothing.";
 
+  // How fast self driving goes.
+  //
+  // The wallet answers a keypress in about a fifth of a second, so left to
+  // itself this whole ceremony went past in two minutes: thirteen steps, a
+  // hundred and fifty odd actions, and nothing on screen long enough to read.
+  // Waiting on the wallet is not pacing, so the pacing is here: before an
+  // action is performed, the run waits for roughly as long as the sentence
+  // describing it takes to take in, and a step's own paragraph gets longer
+  // because it is the part actually worth reading.
+  //
+  // These are a starting point rather than a finding. The controls in the panel
+  // are the real answer for anyone this does not suit: Pause stops it between
+  // actions and Step takes exactly one.
+  var READ_FLOOR = 500;      // a beat, even for a three word instruction
+  var READ_PER_WORD = 100;   // about 600 words a minute: a glance, not a study
+  var READ_MAX = 3000;       // no single action holds the run longer than this
+  var STEP_MAX = 8000;       // except the paragraph that opens a step
+  // Between the keypresses of one action. Fast enough not to be a wait, slow
+  // enough that a menu is seen moving one line at a time rather than jumping.
+  var PRESS_GAP = 340;
+
   // ---------------------------------------------------------------- the panel
 
   var CSS = [
@@ -166,6 +187,7 @@
     this.cursor = 0;
     this.mode = "idle";
     this.paused = true;
+    this.stepOnce = false;
     this.generation = 0;
     this.details = [];
     this.build(options.container);
@@ -189,6 +211,7 @@
     head.appendChild(this.controls);
 
     this.playButton = this.control("Play", this.togglePlay.bind(this));
+    this.stepButton = this.control("Step", this.stepOn.bind(this));
     this.handsButton = this.control("I will drive", this.toggleHands.bind(this));
     this.againButton = this.control("Start again", this.restart.bind(this));
 
@@ -351,6 +374,18 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   };
 
+  /**
+   * Leave time to read what has just gone up, before anything else moves.
+   *
+   * Self driving only: in hands on the visitor sets the pace by pressing the
+   * buttons, and waiting on top of that would only be in the way.
+   */
+  Tutorial.prototype.pace = function (text, ceiling) {
+    if (this.mode !== "self" || !text) return Promise.resolve();
+    var words = String(text).trim().split(/\s+/).length;
+    return this.sleep(Math.min(ceiling || READ_MAX, READ_FLOOR + words * READ_PER_WORD));
+  };
+
   // ------------------------------------------------------------ the device
 
   Tutorial.prototype.press = function (names, gap) {
@@ -358,7 +393,7 @@
     return names.reduce(function (chain, name) {
       return chain.then(function () {
         self.sendKey(self.keymap[name]);
-        return self.sleep(gap || 200);
+        return self.sleep(gap || PRESS_GAP);
       });
     }, Promise.resolve());
   };
@@ -440,9 +475,14 @@
     this.detailList.appendChild(dd);
   };
 
+  // Shown while it is driving, paused or not: pausing does not undo the actions
+  // that have already happened, so a line that emptied itself when the run
+  // stopped would be saying something untrue. It stays where the last piece of
+  // evidence left it, which is also what it does during the wait before an
+  // action, because nothing has happened yet.
   Tutorial.prototype.setProgress = function (fraction) {
-    var showing = this.mode === "self" && !this.paused;
-    this.barFill.style.width = showing ? Math.round(fraction * 100) + "%" : "0";
+    this.barFill.style.width = this.mode === "self"
+      ? Math.round(fraction * 100) + "%" : "0";
   };
 
   /**
@@ -462,8 +502,24 @@
   Tutorial.prototype.togglePlay = function () {
     if (this.mode === "idle") return this.start("self");
     this.paused = !this.paused;
-    this.playButton.textContent = this.paused ? "Play" : "Pause";
-    this.setProgress(this.fraction || 0);
+    this.stepOnce = false;               // Play means keep going, not one more
+    this.reflect();
+  };
+
+  /**
+   * One action, then stop again.
+   *
+   * The whole of the next thing the panel describes happens -- the keys are
+   * pressed and the evidence for them is waited for -- and then the run pauses
+   * itself. Nothing is ever left half pressed, because the pausing is done
+   * between actions and only there, which is the same place the Play button
+   * takes effect.
+   */
+  Tutorial.prototype.stepOn = function () {
+    this.stepOnce = true;
+    if (this.mode === "idle") return this.start("self");
+    this.paused = false;
+    this.reflect();
   };
 
   /**
@@ -481,6 +537,7 @@
     var step = this.at, action = this.atAction;
     this.mode = this.mode === "hands" ? "self" : "hands";
     this.paused = false;
+    this.stepOnce = false;
     this.generation++;               // let the wait in flight go
     this.reflect();
     this.run(step, action);
@@ -493,6 +550,8 @@
   Tutorial.prototype.reflect = function () {
     this.playButton.textContent = this.paused ? "Play" : "Pause";
     this.playButton.classList.toggle("on", this.mode === "self" && !this.paused);
+    // Stepping through is what hands on already is, so it is not offered twice.
+    this.stepButton.disabled = this.mode === "hands";
     this.handsButton.textContent = this.mode === "hands" ? "Let it drive" : "I will drive";
     this.handsButton.classList.toggle("on", this.mode === "hands");
     this.setProgress(this.fraction || 0);
@@ -532,9 +591,19 @@
       if (!first) {
         self.verdict.textContent = "";
         self.verdict.removeAttribute("data-state");
+        // The step's paragraph is being read; the last step's last instruction
+        // is not the thing to leave standing under it.
+        self.doText.textContent = "";
       }
       self.fraction = first / step.actions.length;
       self.setProgress(self.fraction);
+
+      // A step opens with a title and a paragraph saying what is about to
+      // happen, which is the part worth reading whole, so it is read before the
+      // first action rather than underneath one already running.
+      var opening = first
+        ? Promise.resolve()
+        : self.pace(step.title + ". " + step.text, STEP_MAX);
 
       return step.actions.slice(first).reduce(function (chain, action, offset) {
         var at = first + offset;
@@ -543,14 +612,25 @@
           return self.gate();
         }).then(function () {
           self.doText.textContent = action.instruct || "";
-          if (self.mode === "self" && action.perform) return action.perform(context);
+          if (self.mode !== "self") return null;
+          // The instruction is up; leave time to read it before the device
+          // moves. An action with nothing to say gets no wait, because what
+          // it is waiting for is the thing to watch.
+          return self.pace(action.instruct).then(function () {
+            if (action.perform) return action.perform(context);
+          });
         }).then(function () {
           return action.until(context);
         }).then(function () {
           self.fraction = (at + 1) / step.actions.length;
           self.setProgress(self.fraction);
+          if (self.stepOnce) {           // one action was all that was asked for
+            self.stepOnce = false;
+            self.paused = true;
+            self.reflect();
+          }
         });
-      }, Promise.resolve()).then(function () {
+      }, opening).then(function () {
         return runStep(index + 1, 0);
       });
     }
@@ -955,10 +1035,10 @@
     function coordinator(work) {
       return act(null, null, function (context) {
         return Promise.resolve(work(context)).then(function () {
-          // Deriving an address takes a fifth of a second and has a sentence
-          // worth reading attached to it, so the step waits for a reader rather
-          // than for itself.
-          return t.mode === "self" ? t.sleep(3000) : null;
+          // Deriving an address takes a fifth of a second and puts a sentence
+          // up worth reading -- an address, an amount, a transaction id -- so
+          // the step waits for a reader rather than for itself.
+          return t.pace(t.verdict.textContent || t.stepText.textContent, STEP_MAX);
         });
       });
     }

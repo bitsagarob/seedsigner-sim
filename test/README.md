@@ -29,7 +29,7 @@ downloads the Pyodide runtime and builds both wallet zips from their pinned
 upstream commits, which takes a few minutes; later runs reuse all of it.
 
 A subset, by substring on the step name -- the names are `leak_scan`, `cards`,
-`tray_layout`, `firmware`, `build_info`, `settings`, `scan_seedqr`, `scan_compact`,
+`tray_layout`, `device`, `firmware`, `build_info`, `settings`, `scan_seedqr`, `scan_compact`,
 `scan_native`, `stock_scan_seedqr`, `stock_scan_compact`, `stock_scan_native`,
 `cards_browser`, `cards_seed`, `cards_seedkeeper`, `cards_descriptor`, `mainnet`:
 
@@ -95,6 +95,28 @@ tests failed before either has finished booting.
 at a narrow viewport with no horizontal scrollbar, the accent and lift that show
 which card is in, one card in the reader at a time, and Enter on a focused card
 inserting it *without* also reaching the wallet's key handler underneath.
+
+**`test_device.py`**: the device art as a control, on a phone. Two claims, and
+neither of them needs the wallet, so this file costs seconds.
+
+The screen is not a button. It used to be the select key, on the grounds that it
+is the biggest target on the shell, and on a phone that meant a tap anywhere on
+the home menu opened the camera. A SeedSigner has no touchscreen, so neither has
+this. The proof is a second device rendered on the page with an `onKey` that only
+counts, driven by real touch events through the DevTools protocol: a tap on the
+screen counts nothing, a tap on a key counts exactly one -- not two, which is
+what a device answering both the pointer event and the mouse event the browser
+synthesises afterwards would count -- a finger held for two seconds still counts
+one, because a hardware button does not repeat, and two fingers landing together
+count one.
+
+Then the size of those keys. A landscape shell fitted to a 360 pixel phone draws
+them 21 pixels across, which is not a thumb target, so the page offers the device
+the whole viewport and lays it along the phone's long side: upright it is turned
+across the screen, sideways it is height-bound, and the keys are about 46 pixels
+either way. Both orientations are checked and photographed, along with the
+wallet's own screen staying 4:3 and unstretched in both, since what the scan
+tests compare is that canvas.
 
 **`test_firmware.py`**: the firmware switch, and what the page claims while it is
 on each one. Two firmwares are built and the page runs one of them, which decides
@@ -331,6 +353,17 @@ for has happened. It also hands back mid-step and checks the run finishes the
 card on its own, which is the claim that the two modes are one machine. The
 progress line is checked to be absent while the visitor is driving and back when
 it is not.
+
+**Self driving runs at reading speed, and the visitor can stop it.** The whole
+ceremony used to go past in two minutes, about a third of a second per
+instruction, so the run now waits for what it has just said to be read. The test
+times three consecutive instructions and requires the panel to be moving slower
+than that; then it pauses mid-run and checks nothing moves for eight seconds and
+the progress line keeps what has already happened, presses Step and checks
+exactly one action goes by before it stops again, and presses Play and checks it
+carries on. The failure states below then run on that same page with the reading
+pauses turned off from the test, because getting to the faucet means driving six
+card steps first and every pause on the way is one this file has just measured.
 
 **The failure states are designed.** Bitsaga Signet is broken in the three ways
 it can be broken, from the test rather than from the page: the faucet answers
