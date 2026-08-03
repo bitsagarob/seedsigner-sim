@@ -502,6 +502,68 @@ rather than `_run`, because waiting for a button is all `_run` does, so the
 brightness adjustment, the tip toast, the encoder's frame sequence and the exit
 conditions all stay upstream's.
 
+## The multisig tutorial
+
+[`src/web/wallet-tutorial.js`](../src/web/wallet-tutorial.js),
+[`signet-coordinator.js`](../src/web/signet-coordinator.js),
+[`qr-encode.js`](../src/web/qr-encode.js),
+[`ur-decode.js`](../src/web/ur-decode.js)
+
+A whole 2 of 3 inside the page: three seeds onto three cards, three public keys
+back off them, a wallet built from those keys, coins from Bitsaga Signet's
+faucet, and a spend signed twice and confirmed. Four things about it are
+architecture rather than content.
+
+**It is one machine, not two.** A step is a list of actions, and an action is a
+sentence, the keys that satisfy it, and the evidence that it happened. Self
+driving performs the keys; hands on leaves them to the visitor. Both wait on the
+same evidence, so there is one description of the flow and the panel keeps pace
+either way.
+
+**The evidence is the same narration the tests read.** The tutorial knows which
+screen the device is on by watching `display() enter: <Screen>`, exactly as
+`test/harness.py` does. That narration is normally off, so `wallet.html` asks
+the worker for it whenever the tutorial is running (`debug: DEBUG || TUTORIAL`);
+only `?debug=1` puts it on the console. That is also why the button on the
+resting page reloads into `?tutorial=1` rather than starting in place: the
+worker's flags are set once, at boot, and the flow needs three untouched cards
+and a wallet holding no seeds anyway.
+
+**The camera is pointed at the phone.** `CameraChannel.runPage` takes an
+optional `source` that hands back a `MediaStream` instead of calling
+`getUserMedia`, and the tutorial passes `canvas.captureStream()` on the phone
+mock's own screen. Everything below that line is unchanged: the same 640×480
+capture canvas, the same `BarcodeDetector` gate, the same jsQR producing the
+payload, the same `DecodeQR` in Python. The optics are what is missing, not the
+decode, and no webcam permission is ever asked for. Reading the other way needs
+no seam at all: the phone reads the device's canvas with the same jsQR.
+
+**The coordinator is a second implementation, on purpose.** `signet-coordinator.js`
+does BIP32 public derivation (which means secp256k1 point addition, in BigInt),
+sortedmulti, P2WSH, bech32 and BIP174, and shares no code with the wallet.
+`test/test_tutorial.py` checks every value it produces against embit taken out
+of the wallet zip. Two implementations agreeing is worth something; one agreeing
+with itself is not. It reaches Bitsaga Signet over HTTPS for the three things a
+browser cannot do for itself: ask the faucet, read a transaction back off the
+chain, and send one. The last of those has no endpoint yet;
+[SIGNET-API.md](SIGNET-API.md) says what to add.
+
+`qr-encode.js` exists because jsQR only reads. It is byte mode, level L, mask 0
+and versions 1 to 20, which is the smallest thing that can draw what this
+tutorial holds up.
+
+`ur-decode.js` exists because a signed PSBT comes back as an animated
+`ur:crypto-psbt`, and reassembling it is what a coordinator does. It decodes the
+**fountain codes**, not only the plain fragments, and that is not optional: a
+device emits the plain fragments once, in order, and everything after that is a
+mixture of several of them XORed together. A reader that understood only the
+plain ones would work exactly once, on a pass where it missed no frame at all,
+and never again, which is a worse failure than not working. So the same
+xoshiro256\*\* generator, alias-method sampler and shuffle the encoder uses are
+here too, to work out what went into each mixture.
+`test/test_tutorial.py` gives it nothing but mixtures and requires the
+transaction back.
+
 ## The rest of the environment
 
 The boot shim in `wallet-worker.js` also patches over the ways Pyodide is not a

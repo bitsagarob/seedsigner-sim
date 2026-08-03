@@ -307,6 +307,64 @@ Smartcard firmware only. Both firmwares carry the same embit, and neither the
 export screens nor the signing path is card code, so a second run would spend
 minutes proving the same thing again.
 
+## `test_tutorial.py`: the multisig tutorial, without a network
+
+Three things about the tutorial can be checked offline, and one cannot.
+
+**The coordinator on the page computes the right things.** Nothing in
+`src/web/signet-coordinator.js` is shared with the wallet: it is a second
+implementation of BIP32 public derivation, sortedmulti, P2WSH, bech32 and
+BIP174, written for the browser. So every value it produces is compared against
+**embit**, taken out of the wallet zip, which is the library the device parses
+these with: the 2 of 3 descriptor, the first receive address, the change
+address, the witness script behind them, and the id of the finished
+transaction. embit also signs the coordinator's own PSBT with two of the three
+test seeds, so the finishing half is exercised with signatures the coordinator
+did not make. Two implementations agreeing is worth something; one agreeing with
+itself is not. In the same pass, every code the phone holds up is drawn by
+`qr-encode.js` and read back by jsQR, which is the pair the device's camera path
+actually uses.
+
+**Hands on mode works.** The test presses the buttons itself, in the order the
+panel asks for them, and checks the panel moves on only when the thing it asked
+for has happened. It also hands back mid-step and checks the run finishes the
+card on its own, which is the claim that the two modes are one machine. The
+progress line is checked to be absent while the visitor is driving and back when
+it is not.
+
+**The failure states are designed.** Bitsaga Signet is broken in the three ways
+it can be broken, from the test rather than from the page: the faucet answers
+"empty", the request is refused outright, and the request is never answered at
+all. Each has to reach a red verdict saying so in words, with a way out, and
+each is photographed. The last one is why the coordinator gives up on a request
+after twenty seconds: a call that never answers would otherwise leave the panel
+waiting for ever with nothing on screen to say so.
+
+It finishes at 360 pixels wide, open drawers and all, and fails if anything
+pushes the page sideways.
+
+What it cannot prove is that a spend confirms on a real chain.
+
+## `test_tutorial_live.py`: and with one
+
+Not in `run.py`, and not run by CI: it needs the network, it needs Bitsaga
+Signet to be up, and it waits for real blocks. It drives the whole tutorial self
+driving, follows the panel's own step titles, refuses any red verdict, and at
+the end asks Bitsaga Signet's proof endpoint whether the transaction the panel
+says it sent is in a block.
+
+Two pieces of scaffolding, both in `signet_bridge.py`. The page is served **at
+https://bitsaga.be**, which is the only browser origin that API allows, by
+answering that origin from the local server with the two isolation headers; the
+page is this checkout and every call to `signet.bitsaga.be` goes to the real
+host. And `POST /api/broadcast` is answered by the test, because that endpoint
+does not exist on the server yet: it hands the transaction to Fulcrum with the
+same Electrum call the endpoint would use, so the broadcast is real.
+[`docs/SIGNET-API.md`](../docs/SIGNET-API.md) is the endpoint to add. That
+server does not listen on anything public, so `SIGNET_ELECTRUM=host:port` has to
+be set to run this file, and where it does listen is deliberately not written
+down in this repository.
+
 ## Supporting files
 
 - `harness.py`: where to point the tests, and the log reader they share.

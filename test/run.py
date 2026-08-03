@@ -60,7 +60,13 @@ SUITE = [
     ("cards_seedkeeper", ["test_cards_seedkeeper.py"], True),
     ("cards_descriptor", ["test_cards_seedkeeper_descriptor.py"], True),
     ("mainnet", ["test_mainnet.py"], True),
+    ("tutorial", ["test_tutorial.py"], True),
 ]
+
+# test_tutorial_live.py is deliberately not here. It drives the whole multisig
+# tutorial against the real Bitsaga Signet, which means the network, a chain
+# that has to be up, and real waiting for real blocks. test_tutorial.py covers
+# everything about it that can be checked without any of that.
 
 # The same file scanned twice per firmware, once per QR encoding. Both must
 # reach the same seed, and the compact one is the encoding that breaks first if

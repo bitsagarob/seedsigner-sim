@@ -4,7 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<!-- One host is named beyond 'self', and only one: signet.bitsaga.be, which is
+     the faucet and the two read-only proof endpoints of Bitsaga Signet. Nothing
+     asks it anything unless the multisig tutorial is running, and the wallet
+     itself never talks to it at all. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://signet.bitsaga.be; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>SeedSigner wallet simulator</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -147,6 +151,11 @@
   /* Stock SeedSigner has no smartcard code at all, so under it the tray is
      never built and this leaves no gap behind. */
   #cardtray:empty { display: none; }
+  /* The tray is three cards wide at their natural size, and this column centres
+     its children rather than stretching them, so without a ceiling it sizes to
+     its content and takes the page sideways with it on a narrow phone. The
+     cards already know how to shrink; they just have to be told to. */
+  #cardtray { max-width: 100%; }
   @media (max-width: 30rem) {
     body { padding: 1rem .75rem; gap: .75rem; }
     h1 { font-size: 1.05rem; }
@@ -185,10 +194,17 @@
           smartcard API at all. The smartcard fork only: stock SeedSigner has no
           card code for them to answer.</li>
         </ul>
-        <p>Nothing leaves your browser. The page declares a content security policy that
-        permits no connections to any other origin, and there is no server to send anything to.</p>
+        <p>Nothing leaves your browser. The wallet has no network of any kind, and the
+        page's content security policy names exactly one other origin it may reach:
+        <code>signet.bitsaga.be</code>, the faucet and proof endpoints of Bitsaga Signet,
+        which nothing asks anything unless you start the multisig tutorial.</p>
         <p><strong>It is a simulator.</strong> Treat every key it shows as public and
-        never type a seed phrase you rely on.</p>
+        never type a seed phrase you rely on. Mainnet works here exactly as on
+        hardware, and that is the danger: on Mainnet this page exports the correct
+        mainnet account keys and produces real, valid mainnet signatures. It sits in
+        the device's own Settings and Advanced menus where it always has, neither
+        hidden nor recommended, and the multisig tutorial has no use for it: Bitsaga
+        Signet does the whole thing.</p>
         <p>Source, and a build script that rebuilds this wallet from a pinned
         upstream commit so you can check the claim above yourself:
         <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">seedsigner-sim</a>.
@@ -259,6 +275,9 @@
   with <a href="/signet">Bitsaga Signet</a>, our own test network. These are not real
   bitcoin. They exist only on our test network, cannot be sold or sent to anyone, and
   are worth nothing.</p>
+  <!-- Either one button, or, once it has been pressed, the tutorial itself.
+       Nothing else is added to the page at rest. -->
+  <div id="tutorial-slot"></div>
   <div id="cardtray"></div>
   <p class="hint"><a id="debuglink" href="?debug=1">debug</a></p>
   <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>
@@ -266,6 +285,10 @@
 <script src="seedsigner-device.js"></script>
 <script src="wallet-camera.js"></script>
 <script src="wallet-cards.js"></script>
+<script src="qr-encode.js"></script>
+<script src="ur-decode.js"></script>
+<script src="signet-coordinator.js"></script>
+<script src="wallet-tutorial.js"></script>
 <script>
 // Offline cache. Registered late and failure-tolerant: the simulator must work
 // exactly the same if this is unavailable or blocked.
@@ -285,6 +308,14 @@ const DEBUG = new URLSearchParams(location.search).has("debug");
 const FIRMWARES = ["smartcard", "stock"];
 const asked = new URLSearchParams(location.search).get("firmware");
 const FIRMWARE = FIRMWARES.includes(asked) ? asked : FIRMWARES[0];
+
+// The multisig tutorial. It drives the device, the cards and the camera, so it
+// needs a wallet that has just booted and three cards nobody has touched, which
+// is why the button on the resting page reloads into ?tutorial=1 rather than
+// starting on top of whatever state the page is already in. Smartcard fork
+// only: the whole flow is about SeedKeeper cards, and stock has none.
+const TUTORIAL = new URLSearchParams(location.search).has("tutorial")
+              && FIRMWARE === "smartcard";
 
 // How the page names each firmware, on the switch and in the sentence under the
 // device. Neither is called "SeedSigner" on its own: one is a third party fork
@@ -491,6 +522,10 @@ function paint(bytes) {
 
 mountDevice(W, H);
 
+// Set once the tutorial is mounted, and only then. Everything that talks to it
+// checks first, because on the resting page there is nothing there.
+let tutorial = null;
+
 if (!window.crossOriginIsolated) {
   statusEl.textContent = "this page needs cross-origin isolation, which the server is not sending";
   statusEl.className = "err";
@@ -512,6 +547,10 @@ if (!window.crossOriginIsolated) {
         statusEl.className = "ready";
       }
     } else if (type === "log") {
+      // The tutorial reads the same narration the tests do -- it is how it
+      // knows which screen the device reached -- so the worker is asked for it
+      // whenever the tutorial is running. Only ?debug=1 puts it on the console.
+      if (tutorial) tutorial.log(event.data.message);
       if (DEBUG) console.log("[py] " + event.data.message);
     } else if (type === "status") {
       statusEl.textContent = event.data.message;
@@ -536,13 +575,25 @@ if (!window.crossOriginIsolated) {
   };
 
   // The camera stays idle until the wallet asks for it, so nothing here prompts
-  // for permission before the user actually chooses to scan.
-  CameraChannel.runPage(cameraBuffer);
-  if (cardBuffer) CardTray.runPage(cardBuffer, "cardtray");
+  // for permission before the user actually chooses to scan. During the
+  // tutorial it is handed the phone's own screen instead of a webcam, so the
+  // permission prompt never happens at all.
+  CameraChannel.runPage(cameraBuffer,
+    TUTORIAL ? { source: WalletTutorial.cameraSource } : null);
+  const tray = cardBuffer ? CardTray.runPage(cardBuffer, "cardtray") : null;
+
+  const slot = document.getElementById("tutorial-slot");
+  if (TUTORIAL) {
+    tutorial = WalletTutorial.mount({
+      container: slot, sendKey, keymap: KEYMAP, tray, screen: canvas,
+    });
+  } else if (FIRMWARE === "smartcard") {
+    WalletTutorial.offer(slot);
+  }
 
   worker.postMessage({
     type: "init", sharedBuffer: shared, cameraBuffer, cardBuffer,
-    width: W, height: H, debug: DEBUG, firmware: FIRMWARE,
+    width: W, height: H, debug: DEBUG || TUTORIAL, firmware: FIRMWARE,
   });
 
   document.addEventListener("keydown", (event) => {
