@@ -204,6 +204,31 @@ smartcard)
 #
 # ecdsa needs six, which upstream pins but the earlier hand-assembled tree was
 # missing; it is pinned here at upstream's version.
+#
+# pysatochip is the one row whose pin is deliberately NOT the one in upstream's
+# requirements.txt, because the device does not use that file. requirements.txt
+# asks PyPI for pysatochip==0.17.0; the SeedSigner OS image builds
+# 3rdIteration/pysatochip from GitHub at the tag 0.6a through buildroot, and
+# then deletes requirements.txt from the rootfs. Both are in seedsigner-os at
+# the tag whose name matches this firmware's, SeSi-0.8.7+ShSi-B11:
+#
+#   opt/external-packages/python-pysatochip/python-pysatochip.mk
+#       PYTHON_PYSATOCHIP_VERSION = 0.6a
+#       PYTHON_PYSATOCHIP_SITE = $(call github,3rdIteration,pysatochip,...)
+#   opt/pi0-smartcard/configs/pi0-smartcard_defconfig
+#       BR2_PACKAGE_PYTHON_PYSATOCHIP=y
+#   opt/build.sh
+#       rm -rf ${rootfs_overlay}/opt/requirements.txt
+#
+# The two are not the same code. That GitHub tag calls itself pysatochip 0.17.4
+# in its own version.py, four revisions past the newest release on PyPI, and one
+# of those revisions is "correct handling of Password, Descriptor and Data
+# secret types in seedkeeper export": its SEEDKEEPER_DIC_TYPE has
+# 0xC1: 'Descriptor' and PyPI 0.17.0 has no entry for that type at all. Shipping
+# the PyPI one gave this simulator a descriptor failure that does not exist on
+# the device, which is precisely the kind of lie a simulator must not tell. So
+# the row below is the tag, pinned by commit like every other git row here.
+# Stock has no card code and no pysatochip, so none of this touches its build.
 
 read -r -d '' DEPENDENCIES <<'DEPS' || true
 pypi|base58|base58|2.1.1|https://files.pythonhosted.org/packages/4a/45/ec96b29162a402fc4c1c5512d114d7b3787b9d1c2ec241d9568b4816ee23/base58-2.1.1-py3-none-any.whl|11a36f4d3ce51dfc1043f3218591ac4eb1ceb172919cebe05b52a5bcc8d245c2|.
@@ -215,13 +240,13 @@ pypi|ndef|ndeflib|0.3.3|https://files.pythonhosted.org/packages/c9/80/bbc9a4818c
 pypi|OpenSSL|pyOpenSSL|25.1.0|https://files.pythonhosted.org/packages/80/28/2659c02301b9500751f8d42f9a6632e1508aa5120de5e43042b8b30f8d5d/pyopenssl-25.1.0-py3-none-any.whl|2b11f239acc47ac2e5aca04fd7fa829800aeee22a2eb30d744572a157bd8a1ab|.
 pypi|pyaes|pyaes|1.6.1|https://files.pythonhosted.org/packages/44/66/2c17bae31c906613795711fc78045c285048168919ace2220daa372c7d72/pyaes-1.6.1.tar.gz|02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f|pyaes-1.6.1
 pypi|pyasn1|pyasn1|0.6.2|https://files.pythonhosted.org/packages/44/b5/a96872e5184f354da9c84ae119971a0a4c221fe9b27a4d94bd43f2596727/pyasn1-0.6.2-py3-none-any.whl|1eb26d860996a18e9b6ed05e7aae0e9fc21619fcee6af91cca9bad4fbea224bf|.
-pypi|pysatochip|pysatochip|0.17.0|https://files.pythonhosted.org/packages/a6/f0/3502c54f03ac1ae5accb553c116cb85b897fbb1529a6b1deecad884adf3c/pysatochip-0.17.0-py3-none-any.whl|2e7085c6d64dd89d2b5ccdab5319735ef837d708f8d2bf084ea8ba5c2c18fe41|.
 pypi|qrcode|qrcode|7.3.1|https://files.pythonhosted.org/packages/94/9f/31f33cdf3cf8f98e64c42582fb82f39ca718264df61957f28b0bbb09b134/qrcode-7.3.1.tar.gz|375a6ff240ca9bd41adc070428b5dfc1dcfbb0f2507f1ac848f6cded38956578|qrcode-7.3.1
 pypi|shamir_mnemonic|shamir-mnemonic|0.3.0|https://files.pythonhosted.org/packages/1d/38/2124e565afe40993949dbc89da6c654a2c9a1b24dd80039812ef7cdbaef3/shamir_mnemonic-0.3.0-py3-none-any.whl|188c6b5bd00d5e756e12e2b186c3cb7c98ff7ff44df608d4c1d2077f6b6e730f|.
 pypi|six.py|six|1.17.0|https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl|4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274|.
 pypi|typing_extensions.py|typing_extensions|4.14.1|https://files.pythonhosted.org/packages/b5/00/d631e67a838026495268c2f6884f3711a15a9a2a96cd244fdaea53b823fb/typing_extensions-4.14.1-py3-none-any.whl|d1e1e3b58374dc93031d6eda2420a48ea44a36c2b4766a4fdeb3710755731d76|.
 git|pgpy|PGPy-3rdIteration-fork|7cdad000a76ced53c873211241d5ba20019a8488|https://github.com/3rdIteration/PGPy.git|7cdad000a76ced53c873211241d5ba20019a8488|.
 git|pygp|PyGP-3rdIteration-fork|15682ec8fd042b5d0ae3422e9434e9734db6e55b|https://github.com/3rdIteration/pygp.git|15682ec8fd042b5d0ae3422e9434e9734db6e55b|.
+git|pysatochip|pysatochip-3rdIteration|d77e311e0cd39193c9b2c03a1ab5f69421b8f4d5|https://github.com/3rdIteration/pysatochip.git|d77e311e0cd39193c9b2c03a1ab5f69421b8f4d5|.
 git|specter_card|specter-card|06dcde629cdc1057934b434afc46d822c2d2425d|https://github.com/3rdIteration/specter-javacard.git|06dcde629cdc1057934b434afc46d822c2d2425d|py
 git|urtypes|urtypes|7fb280eab3b3563dfc57d2733b0bf5cbc0a96a6a|https://github.com/selfcustody/urtypes.git|7fb280eab3b3563dfc57d2733b0bf5cbc0a96a6a|src
 DEPS

@@ -95,6 +95,10 @@ switches to stock and back, and `?firmware=stock` is a link straight to it.
   official pi0-smartcard device image is built from, so the fork here and that
   physical device run the same code; stock makes no such claim, because there is
   no such image. A branch tip can be rebased out from under a pin; a tag cannot.
+  Where that image and `requirements.txt` disagree, the image wins: pysatochip is
+  built from the GitHub tag the buildroot recipe names, not from the PyPI version
+  a file the device deletes asks for. The two differ, and the difference showed
+  up here as a card failure that does not exist on hardware.
 - **You can rebuild either and compare.** `build/build-wallet-zip.sh` reproduces
   a wallet zip byte for byte: fixed timestamps, fixed order, no build host in the
   output. If your hash matches the file a page served you, what you ran was that
@@ -139,6 +143,9 @@ card tray on the page: none of it is missing there, it was never there.
   ships with. Either takes a PIN and checks it.
 - **SeedKeeper, end to end:** *Backup seed → To SeedKeeper* puts a seed on the
   card, *Seeds → Load a seed → From SeedKeeper* reads it back off.
+- **A multisig descriptor onto a SeedKeeper.** *Save MultiSig Descriptor* files a
+  2 of 3, 448 characters of it, on the card under the descriptor secret type a
+  v2 card uses. Reading one back is upstream's problem, below.
 - **Satochip:** holds a real BIP32 master key and a real authentikey, and
   pysatochip verifies every answer it signs.
 
@@ -161,14 +168,16 @@ card tray on the page: none of it is missing there, it was never there.
   `card_bip32_import_seed()`, which returns one, so a *successful* import is what
   raises. Still present on their `dev` tip; nothing here works around it. The card
   is seeded regardless and reading it back works.
-- **A multisig descriptor by card: upstream's bug too.** The two screens are
-  there, and so is everything the card needs (`test_cards.py` puts a 2 of 3 on
-  one, 448 characters of it, and reads it back byte for byte). But a SeedKeeper
-  v2 files a descriptor under a secret type the pinned pysatochip has no name
-  for, so *Save MultiSig Descriptor* raises `KeyError: 'Descriptor'` before a
-  byte reaches the card, and *Load MultiSig Descriptor* can never match one. One
-  missing dictionary entry in somebody else's package; nothing here works
-  around it.
+- **Reading a multisig descriptor back off a card: upstream's bug too.** Saving
+  one works, and the card really is carrying it (`test_cards.py` reads the same
+  448 characters back byte for byte at the APDU level). But every view that reads
+  a SeedKeeper's headers by name, *Load MultiSig Descriptor* among them, needs
+  `SEEDKEEPER_DIC_TYPE`, and `smartcard_views.py` never binds it: the name is
+  imported inside a `try`/`except ImportError` next to three modules that exist
+  in no published pysatochip, so the whole import is swallowed. The screen puts
+  up `name 'SEEDKEEPER_DIC_TYPE' is not defined`. Saving survives it only because
+  it reads the headers of a card it just found empty; a second descriptor onto
+  the same card raises the same thing. Nothing here works around any of it.
 - **Copying a secret from one SeedKeeper to another**, an encrypted exchange
   needing a second card to negotiate a session key with. Refused rather than
   quietly done in the clear.

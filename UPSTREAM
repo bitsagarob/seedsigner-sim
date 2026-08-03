@@ -44,5 +44,5 @@ repo   = https://github.com/3rdIteration/seedsigner.git
 commit = 662d9dba2327eb77d6924ae9bd62d4902bf24634
 tag    = SeSi-0.8.7+ShSi-B11
 
-wallet_zip_sha256          = d872779967ed1e2b400de469590dd7bf3a459db66c071d26211e87f866db3199
-wallet_zip_contents_sha256 = d2e658a2a422c8d2a318ec0f1159d1a29750b1862b27fd2cf59c336bf9376180
+wallet_zip_sha256          = 3d6a150df29ee18b52931900418341b45a597beb0dc3c14545de99f999a7dd74
+wallet_zip_contents_sha256 = c783f8bef83c5d7d577515d27ff02fb221d9057dada68aa7339de9749934ecac

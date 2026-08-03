@@ -145,7 +145,7 @@ noted.
 | `pyaes` | pyaes | 1.6.1 | MIT |
 | `pyasn1` | pyasn1 | 0.6.2 | BSD-2-Clause |
 | `pygp` | PyGP, 3rdIteration fork | `15682ec8fd042b5d0ae3422e9434e9734db6e55b` | LGPL-3.0 |
-| `pysatochip` | pysatochip | 0.17.0 | LGPL-3.0 |
+| `pysatochip` | pysatochip, 3rdIteration fork | `d77e311e0cd39193c9b2c03a1ab5f69421b8f4d5` (tag `0.6a`) | LGPL-3.0 |
 | `qrcode` | qrcode | 7.3.1 | BSD-3-Clause |
 | `shamir_mnemonic` | shamir-mnemonic | 0.3.0 | MIT |
 | `six.py` | six | 1.17.0 | MIT |
@@ -153,19 +153,31 @@ noted.
 | `typing_extensions.py` | typing_extensions | 4.14.1 | PSF-2.0 |
 | `urtypes` | urtypes | `7fb280eab3b3563dfc57d2733b0bf5cbc0a96a6a` | MIT |
 
-Sources for the four commit-pinned ones:
+Sources for the commit-pinned ones:
 
 * PGPy: https://github.com/3rdIteration/PGPy
 * PyGP: https://github.com/3rdIteration/pygp
+* pysatochip: https://github.com/3rdIteration/pysatochip, tag `0.6a`
 * specter-card: https://github.com/3rdIteration/specter-javacard, subdirectory `py/`
 * urtypes: https://github.com/selfcustody/urtypes, subdirectory `src/`
 
-Upstream pins these four as GitHub archive `.zip` URLs. The build script checks
-out the same commits with git instead. A GitHub archive URL names a snapshot of
-a commit, but the zip wrapped around it is generated on demand and its bytes are
-not promised to be stable, so hashing that zip would pin GitHub's archiver
-rather than the source. A commit sha pins the source itself, and git verifies it
-on arrival.
+Upstream pins four of those (PGPy, PyGP, specter-card and urtypes) as GitHub
+archive `.zip` URLs. The build script checks out the same commits with git
+instead. A GitHub archive URL names a snapshot of a commit, but the zip wrapped
+around it is generated on demand and its bytes are not promised to be stable, so
+hashing that zip would pin GitHub's archiver rather than the source. A commit sha
+pins the source itself, and git verifies it on arrival.
+
+**pysatochip is the exception in the table above**, and the only dependency whose
+pin does not come from `requirements.txt`. That file asks PyPI for
+`pysatochip==0.17.0`; the device does not use it. The SeedSigner OS image builds
+`3rdIteration/pysatochip` from GitHub at the tag `0.6a` through buildroot
+(`opt/external-packages/python-pysatochip/python-pysatochip.mk`, at the
+seedsigner-os tag whose name matches this firmware's) and deletes
+`requirements.txt` from the rootfs. The two are not the same code: that tag calls
+itself pysatochip 0.17.4 in its own `version.py`, and it has the
+`0xC1: 'Descriptor'` entry the PyPI release lacks. This simulator ships what the
+device ships, so it fails where the device fails and not somewhere else.
 
 `qrcode`'s licence file is BSD-3-Clause for the package and additionally carries
 the MIT notice of `pyqrnative`, which parts of it were forked from.

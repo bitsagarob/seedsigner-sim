@@ -238,26 +238,36 @@ because card state living only in memory is a decision rather than an oversight.
 
 **`test_cards_seedkeeper_descriptor.py`** -- the other flow the card is sold for,
 a **multisig wallet descriptor** travelling on a SeedKeeper instead of being
-scanned. Neither of the wallet's two screens for it can work at the pinned tag,
-and this file is where that is pinned down rather than discovered again later.
+scanned. Half of it works, and this file is where the halves are separated.
 
 A 2 of 3 over three published BIP39 vectors goes in by camera, so `2 of 3` and
 three fingerprints on the wallet's own screen say embit really parsed it. Then
-*Save MultiSig Descriptor* is driven to the wall: a SeedKeeper v2 files a
-descriptor under a secret type pysatochip 0.17.0 has no name for, so
-`make_header("Descriptor", ...)` raises `KeyError: 'Descriptor'` and the wallet
-puts up an error reading exactly that. The checks are that the success screen is
-unreachable and that **the card was never asked to store anything**: a simulator
-that answered a request the wallet never made would be inventing the flow rather
-than running it. *Load MultiSig Descriptor* is blocked by the same missing entry
-from the other side, and ends on the wallet's own "No Descriptors" for a card it
-did read.
+*Save MultiSig Descriptor* is driven to the end: the wallet puts a PIN on the
+blank card, and the card announces what it was handed -- secret type `0xC1`, the
+label the wallet asked for, and 450 bytes for a 448-character descriptor, which
+is the two-byte length a v2 card's layout puts in front of it. The wallet reaches
+its own Success screen and no warning goes up on the way.
 
-Everything the card would need is proved next door, in `test_cards.py`: the same
-descriptor stored as type `0xC1`, read back byte for byte, its header parsed by
-pysatochip and its cost checked against upstream's own size arithmetic. The fix
-is a line in somebody else's package, so on the day it lands these checks fail
-and say so.
+*Load MultiSig Descriptor* then hits a wall that is upstream's and has nothing to
+do with which pysatochip is shipped. Every view that reads a SeedKeeper's headers
+by name uses `SEEDKEEPER_DIC_TYPE`, and `smartcard_views.py` imports it inside a
+`try`/`except ImportError` together with three modules that exist in no published
+pysatochip, so the import always fails and every name in it stays undefined. The
+screen raises `NameError: name 'SEEDKEEPER_DIC_TYPE' is not defined` and puts
+that sentence up. The checks are that the warning is what happens, that **the
+card was never asked for the descriptor** and that it refused nothing, so what is
+being asserted is the wallet's failure rather than the simulator's. The three
+missing modules are checked out of the wallet zip in the same run, so the reason
+is evidence and not a story.
+
+This file used to assert that *both* screens were blocked, by
+`KeyError: 'Descriptor'`, and that half was ours: PyPI's pysatochip 0.17.0 has no
+name for `0xC1` and the device does not use PyPI. See the pysatochip note in
+`build/build-wallet-zip.sh`. Everything the card end needs is proved next door in
+`test_cards.py`: the same descriptor stored as type `0xC1`, read back byte for
+byte, its header parsed by pysatochip and its cost checked against upstream's own
+size arithmetic. On the day upstream fixes that import, the load check fails and
+says so.
 
 ## Supporting files
 

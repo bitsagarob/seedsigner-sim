@@ -385,7 +385,7 @@ card without it ever appearing in the clear; it needs a session key negotiated w
 that card's public key, and there is no second card here to negotiate with, so
 clone-to-another-card is refused rather than quietly done in plaintext.
 
-Two flows do not work, and neither is this package's fault.
+Two flows still do not work, and neither is this package's fault.
 
 `ToolsSatochipImportSeedView` unpacks `card_bip32_import_seed()`'s return value
 into `(response, sw1, sw2)`, but on the pysatochip backend that method returns the
@@ -393,19 +393,39 @@ card's authentikey, so a *successful* import is what raises `TypeError`. The car
 takes the seed; the screen reports failure. See `test/test_cards_seed.py`, which
 asserts it so the day upstream fixes it is not a silent one.
 
-`ToolsSeedkeeperSaveDescriptorView` and `ToolsSeedkeeperLoadDescriptorView` are
-blocked by one missing dictionary entry. Both name the descriptor secret type by
-string, `"Descriptor"`, and `pysatochip.JCconstants.SEEDKEEPER_DIC_TYPE` has no
-such value in 0.17.0, the version this fork pins and the newest one published: it
-stops at `0xC0: 'Data'`. So `make_header("Descriptor", ...)` raises
-`KeyError: 'Descriptor'` on the way in, and `SEEDKEEPER_DIC_TYPE.get()` can never
-answer `"Descriptor"` for anything a card sends on the way out. The save screen
-takes that branch because it read `protocol_minor_version` off the card and got 2;
-a v1 SeedKeeper takes the other branch and stores a descriptor as a `Password`,
-which pysatochip does have a name for. This card reports 2 because that is what
-the card it stands in for reports, and what the seed layout above depends on.
-`test/test_cards_seedkeeper_descriptor.py` drives both screens to that wall and
-asserts it, including that the card is never asked to store anything.
+`ToolsSeedkeeperLoadDescriptorView` cannot read a descriptor back, and every other
+view that reads a SeedKeeper's headers by name is stopped in the same place.
+`seedsigner/views/smartcard_views.py` imports the names it needs inside a
+`try: … except ImportError: pass`, and three of the four modules that block asks
+for exist in no published pysatochip: `pysatochip.satochip`,
+`pysatochip.exception` and `pysatochip.satochip_protocol_helper` are absent from
+PyPI 0.17.0, from the tag the device builds, and from the fork's own default
+branch. So the import always raises, the `pass` swallows it, and
+`SEEDKEEPER_DIC_TYPE` (which `JCconstants` really does define) is never bound.
+The load screen reads it on the first header the card hands back and raises
+`NameError: name 'SEEDKEEPER_DIC_TYPE' is not defined`, which its own `except`
+puts on a warning screen.
+
+`ToolsSeedkeeperSaveDescriptorView` **works**, and it survives that same missing
+name only because it reads the headers of a card it has just found empty, so the
+loop that would touch it never runs. Saving a second descriptor to the same card
+raises the same `NameError`. The save screen files the descriptor as secret type
+`0xC1` because it read `protocol_minor_version` off the card and got 2; a v1
+SeedKeeper takes the other branch and stores a descriptor as a `Password`. This
+card reports 2 because that is what the card it stands in for reports, and what
+the seed layout above depends on.
+
+Until recently the save half was blocked here too, by `make_header("Descriptor",
+…)` raising `KeyError`, and that one was ours: PyPI's pysatochip 0.17.0 stops at
+`0xC0: 'Data'` and has no name for `0xC1`. The device does not use PyPI. Its OS
+image builds `3rdIteration/pysatochip` at the tag `0.6a` through buildroot and
+deletes `requirements.txt` from the rootfs, and that tree has
+`0xC1: 'Descriptor'`. The build now pins what the device builds, which is what
+made a real save flow appear where a wall used to be. See the pysatochip note in
+[`build/build-wallet-zip.sh`](../build/build-wallet-zip.sh).
+`test/test_cards_seedkeeper_descriptor.py` drives the save to the end and the
+load to its wall, and checks the missing modules out of the wallet zip so the
+`NameError` is evidence rather than a story.
 
 ## The fifth module: screens that show a QR
 

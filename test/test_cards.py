@@ -55,6 +55,7 @@ from pysatochip.JCconstants import (
     SEEDKEEPER_DIC_ORIGIN,
     SEEDKEEPER_DIC_TYPE,
 )
+from pysatochip.util import dict_swap_keys_values
 
 from smartcard import simulated_card
 from smartcard.CardMonitoring import CardMonitor, CardObserver
@@ -618,12 +619,10 @@ check("Card C's SeedKeeper is untouched by any of it",
 # hundreds of bytes, so both of the 128-byte loops -- the client's on the way in,
 # the card's on the way out -- run several passes instead of being skipped.
 #
-# 0xC1 is written out rather than looked up because pysatochip 0.17.0, the
-# version this fork pins, has no name for it: SEEDKEEPER_DIC_TYPE stops at 0xC0
-# 'Data'. That missing entry is the wall the wallet's own descriptor screens hit,
-# and test_cards_seedkeeper_descriptor.py is where it is quoted. The card is
-# asked for the type a SeedKeeper v2 files a descriptor under either way, because
-# what a card stores is not the client's dictionary's business.
+# 0xC1 is written out rather than looked up: the card is asked for the type a
+# SeedKeeper v2 files a descriptor under whatever the client's dictionary happens
+# to say, because what a card stores is not the client's business. Whether the
+# client agrees is a separate question, and it is the check below.
 TYPE_DESCRIPTOR = 0xC1
 
 DESCRIPTOR = make_qr_y4m.multisig_descriptor()
@@ -653,13 +652,17 @@ def counted(connection):
 
 
 print("a multisig wallet descriptor on a SeedKeeper")
-# The wall, asserted in the fast test as well as the slow one, because this is
-# the check that will say so in two seconds on the day it stops being true.
-check("pysatochip has no name for a descriptor, which is the whole of the wall "
-      "the wallet's own descriptor screens hit",
-      "Descriptor" not in SEEDKEEPER_DIC_TYPE.values(),
-      "make_header('Descriptor', ...) raises KeyError; see "
-      "test_cards_seedkeeper_descriptor.py")
+# Client and card agreeing on what a descriptor is, asserted in the fast test as
+# well as the slow one, because this is the check that says so in two seconds.
+# The wallet names the secret type as a string -- make_header("Descriptor", ...)
+# -- and pysatochip turns that name back into a byte with this very function, so
+# if the two disagree the descriptor screens cannot reach a card at all. They did
+# disagree while this repository shipped PyPI pysatochip 0.17.0, whose
+# SEEDKEEPER_DIC_TYPE stops at 0xC0 'Data'; the pysatochip the device builds from
+# GitHub, and the one the smartcard zip now carries, has 0xC1 'Descriptor'.
+check("pysatochip turns the name the wallet uses into the byte the card is asked for",
+      dict_swap_keys_values(SEEDKEEPER_DIC_TYPE)["Descriptor"] == TYPE_DESCRIPTOR,
+      f"'Descriptor' -> 0x{dict_swap_keys_values(SEEDKEEPER_DIC_TYPE)['Descriptor']:02x}")
 check("a descriptor import is refused until the PIN is verified",
       send(0xA1, 0x01, 0x01,
            header_fields(TYPE_DESCRIPTOR, PLAINTEXT_EXPORT, DESCRIPTOR_LABEL)
