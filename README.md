@@ -29,11 +29,15 @@ and doing the same work.
 That is an easy thing to say and a hard thing to believe, which is why most of
 what follows is about making it checkable rather than asking you to take it on
 trust. The copy here is tied to one specific published release of the device
-software, rather than to whatever happened to be newest. Anyone can rebuild the
-file this site serves and get one that is identical, byte for byte — and a machine
-now redoes that on every change, on a computer that has never seen the project
-before. The behaviour, meanwhile, is checked by the tests the device's own authors
-wrote, and not only by tests we wrote ourselves about somebody else's code.
+software (a git tag, not a moving branch), rather than to whatever happened to be
+newest. Anyone can rebuild the file this site serves and get one that is
+identical, byte for byte (a reproducible build, compared by sha256 hash), and a
+machine now redoes that on every change on a computer that has never seen the
+project before (a CI job on a clean GitHub runner, which also has GitHub sign a
+statement about what it built: a build provenance attestation). The behaviour,
+meanwhile, is checked by the tests the device's own authors wrote (upstream's
+pytest suite, run against the dependency versions this repository pins), and not
+only by tests we wrote ourselves about somebody else's code.
 
 ## Try it
 
@@ -60,7 +64,7 @@ load the page runs offline.
 Arrow keys move, Enter selects, `1` `2` `3` are the three side buttons. You can
 also click the buttons on the device.
 
-## What makes it different
+## What it claims, and how to check it
 
 - **It is the firmware, not a re-creation.** `wallet.zip` holds the upstream Python
   tree and the wallet's own `Controller.start()` runs it. Menus, seed handling,
