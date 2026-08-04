@@ -17,7 +17,7 @@
  * blocks inside SeedSigner's controller loop and SharedArrayBuffer is the only
  * channel that can reach it.
  */
-const VERSION = "sim-v5";
+const VERSION = "sim-v6";
 const CACHE = "seedsignersim-" + VERSION;
 
 // Small enough to fetch up front so a first-run offline load still works.
@@ -34,6 +34,7 @@ const SHELL = [
   "./wallet-worker.js",
   "./wallet-camera.js",
   "./wallet-cards.js",
+  "./wallet-coordinator.js",
   "./wallet-track.js",
   "./seedsigner-device.js",
   "./jsQR.js",

@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <!-- One host is named beyond 'self', and only one: signet.bitsaga.be, which is
-     the faucet and the two read-only proof endpoints of Bitsaga Signet. Nothing
-     asks it anything unless the multisig tutorial is running, and the wallet
-     itself never talks to it at all. -->
+     the faucet and the read-only chain endpoints of Bitsaga Signet. Nothing
+     asks it anything until the simulator wallet is opened or the multisig
+     tutorial is started, and the device's own firmware never talks to it at
+     all: both of those are the coordinator, on the page, beside the device. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://signet.bitsaga.be; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>SeedSigner wallet simulator</title>
 <link rel="manifest" href="manifest.json">
@@ -51,34 +52,54 @@
     padding-top: 1.15em;
   }
   #tutorial-slot { width: 100%; min-width: 0; }
-  /* Driving the tutorial is reading a step and watching the device answer it,
-     so the two have to be in view at once. Given the width they go side by side
-     and the device is pinned while the steps scroll past it; without the width
-     they stack, and the device is pinned to the top of the viewport instead.
-     Either way the screen stays where the words can be read against it, which
-     is the whole point and what the single scrolling column never managed. */
-  body.tutoring #stage { max-width: min(94rem, 100%); }
+  /* Closed, and taking no room, until the drawer is pulled out. */
+  #wallet-slot { display: none; }
+  body.wallet-open #wallet-slot { display: block; width: 100%; min-width: 0; }
+  /* An empty companion is not a column. On a page where the wallet is open and
+     the tutorial was never offered, the slot beside it is an empty div, and an
+     empty div with a flex basis is 26rem of nothing pushing the device over. */
+  #tutorial-slot:empty { display: none; }
+  /* Paired: the device with one companion beside it, the tutorial or the
+     wallet. Reading a step, or a balance, and watching the device answer it
+     means the two have to be in view at once. Given the width they go side by
+     side and the device is pinned while the panel scrolls past it; without the
+     width they stack, and the device is pinned to the top of the viewport
+     instead. Either way the screen stays where the words can be read against
+     it, which is the whole point and what the single scrolling column never
+     managed. One rule for both, because there is one split. */
+  body.paired #stage { max-width: min(94rem, 100%); }
   @media (min-width: 62rem) {
-    /* Centred against the steps beside it, not hung off the top of them: the
+    /* Centred against the panel beside it, not hung off the top of it: the
        device is the shorter of the two columns and a shell pinned to the top of
        a tall panel reads as an afterthought next to it. */
-    body.tutoring #stage {
+    body.paired #stage {
       flex-direction: row; align-items: center; gap: 1.25rem;
     }
     /* min-width:0, or the column will not shrink below the device's own natural
-       width -- which is about 1500px -- and squeezes the tutorial to nothing. */
-    body.tutoring #stage-device {
+       width -- which is about 1500px -- and squeezes the companion to nothing. */
+    body.paired #stage-device {
       flex: 1 1 36rem; min-width: 0; width: auto; position: sticky; top: 1rem;
     }
-    body.tutoring #tutorial-slot { flex: 1 1 26rem; width: auto; }
+    body.paired #tutorial-slot, body.paired #wallet-slot { flex: 1 1 26rem; width: auto; }
+    /* Both at once only happens at ?tutorial=offer, where the tutorial's column
+       is one button. It keeps its width rather than a third of the row. */
+    body.wallet-open #tutorial-slot { flex: 0 0 auto; }
   }
   @media (max-width: 61.99rem) {
-    body.tutoring #stage-device {
+    body.paired #stage-device {
       position: sticky; top: 0; z-index: 20; padding-bottom: .4rem;
-      /* Opaque, or the steps scroll through the shell on their way past. */
+      /* Opaque, or the panel scrolls through the shell on its way past. */
       background: #0b0c0e;
     }
   }
+  /* Room for the collapsed wallet, which is fixed to the edge of the viewport.
+     Reserved rather than overlapped: at just over the split the page is as wide
+     as the device is, so a strip floating on top of it floats on top of the
+     device's own keys. */
+  @media (min-width: 62rem) { body.walleted { padding-right: 3.4rem; } }
+  @media (max-width: 61.99rem) { body.walleted { padding-bottom: 4.5rem; } }
+  /* The device on its own is the device on its own. */
+  body.solo .wal, body.solo .wal-strip { display: none; }
   /* Which network the wallet is on: a fact worth having up, not a sentence
      worth reading, so it is one small word in the corner rather than a line of
      its own under the device. Mainnet is the exception and shouts, below. */
@@ -339,11 +360,12 @@
         <p><strong>Nothing leaves your browser.</strong> The wallet has no network
         of any kind, and this page's content security policy names exactly one
         other origin it may reach: <code>signet.bitsaga.be</code>, the faucet and
-        proof endpoints of Bitsaga Signet, which nothing asks anything unless you
-        start the multisig tutorial.</p>
+        chain endpoints of Bitsaga Signet, which nothing asks anything until you
+        open the simulator wallet or start the multisig tutorial.</p>
 
         <p><strong>That one origin is ours.</strong> Bitsaga Signet is a Bitcoin
-        test network we run, and it exists so the multisig tutorial can finish:</p>
+        test network we run, and it exists so that the simulator wallet and the
+        multisig tutorial can finish:</p>
         <ul>
           <li><strong>What it is:</strong> a signet with Testnet address prefixes,
           a faucet, and a block every thirty seconds, so a wallet can be funded and
@@ -354,8 +376,10 @@
           cannot do for itself, which are seeing the chain and reaching the network.
           The wallet is built, the addresses derived, the PSBT assembled and the
           transaction finalised here in the tab; Signet is asked for the faucet
-          payment, for whether a transaction has made it into a block, and to relay
-          the finished one. The wallet itself never talks to it at all.</li>
+          payment, for what a list of addresses holds, for whether a transaction
+          has made it into a block, and to relay the finished one. No key, xpub
+          or descriptor is ever sent to it, and the device's own firmware never
+          talks to it at all.</li>
         </ul>
 
         <p><strong>It is still a simulator</strong>, running in a tab on an
@@ -441,6 +465,9 @@
     <!-- Either one button, or, once it has been pressed, the tutorial itself.
          Nothing else is added to the page at rest. -->
     <div id="tutorial-slot"></div>
+    <!-- The wallet the device deliberately is not: closed, and out of the flow,
+         until somebody pulls the drawer out. -->
+    <div id="wallet-slot"></div>
   </div>
   <div id="cardtray"></div>
   <footer>
@@ -463,6 +490,7 @@
 <script src="ur-decode.js"></script>
 <script src="signet-coordinator.js"></script>
 <script src="wallet-tutorial.js"></script>
+<script src="wallet-coordinator.js"></script>
 <script src="wallet-track.js"></script>
 <script>
 // Offline cache. Registered late and failure-tolerant: the simulator must work
@@ -506,8 +534,11 @@ const TUTORIAL_OFFERED = TUTORIAL_ASKED !== null && FIRMWARE === "smartcard";
 const TUTORIAL = TUTORIAL_OFFERED && TUTORIAL_ASKED !== "offer";
 // Set here rather than when the tutorial mounts, which is after the wallet has
 // started: the layout has to be its final shape while the page is still
-// loading, or the device jumps across the screen a minute in.
-document.body.classList.toggle("tutoring", TUTORIAL);
+// loading, or the device jumps across the screen a minute in. "paired" rather
+// than "tutoring" because the split it turns on is not the tutorial's: the
+// wallet drawer sets the same class for the same layout, and there is one
+// device-plus-companion split rather than two copies of one.
+document.body.classList.toggle("paired", TUTORIAL);
 
 // How the page names each firmware, on the switch and in the sentence inside
 // the details panel. The switch carries the name each build calls itself --
@@ -779,6 +810,36 @@ document.addEventListener("keydown", (event) => {
 // checks first, because on the resting page there is nothing there.
 let tutorial = null;
 
+// The wallet drawer, on every page the tutorial is not running on. One
+// companion at a time: both of them hand the device a picture instead of a
+// webcam, and two things holding a code up to one camera is two things fighting
+// over it.
+let wallet = null;
+
+// Who the device's camera is looking at, decided at the moment it opens rather
+// than when the page loaded.
+//
+// One owner, and it says so out loud: the tutorial owns it for as long as it is
+// running, the wallet owns it only while it is actually holding a code up, and
+// with neither of them claiming it the device gets the real webcam it has
+// always had. Nothing here can hand out two of them, and a device already
+// scanning keeps whatever it opened with, which is why the wallet puts its code
+// up before it says to go to Scan.
+function cameraSource() {
+  if (TUTORIAL) return WalletTutorial.cameraSource();
+  const claimed = window.WalletCoordinator && WalletCoordinator.cameraStream();
+  if (claimed) return claimed;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // getUserMedia is missing rather than merely refused when the page is not a
+    // secure context, which over plain http on a LAN address it is not.
+    throw new Error("no camera API here; needs https or localhost");
+  }
+  return navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false,
+  });
+}
+
 // Reaching this screen at all is the milestone: SeedFinalizeView puts it up
 // holding the fingerprint of a seed that is, by then, in the wallet's memory.
 const MILESTONES = {
@@ -856,6 +917,7 @@ if (!window.crossOriginIsolated) {
       // is asked for it always. Only ?debug=1 puts it on the console, which is
       // what it was ever gated for: it is noise to everyone else.
       if (tutorial) tutorial.log(event.data.message);
+      if (wallet) wallet.log(event.data.message);
       if (DEBUG) console.log("[py] " + event.data.message);
       narrate(event.data.message);
     } else if (type === "status") {
@@ -885,11 +947,10 @@ if (!window.crossOriginIsolated) {
   };
 
   // The camera stays idle until the wallet asks for it, so nothing here prompts
-  // for permission before the user actually chooses to scan. During the
-  // tutorial it is handed the phone's own screen instead of a webcam, so the
-  // permission prompt never happens at all.
-  CameraChannel.runPage(cameraBuffer,
-    TUTORIAL ? { source: WalletTutorial.cameraSource } : null);
+  // for permission before the user actually chooses to scan. When the tutorial
+  // or the wallet is holding a code up it is handed that code's own canvas
+  // instead of a webcam, so the permission prompt never happens at all.
+  CameraChannel.runPage(cameraBuffer, { source: cameraSource });
   const tray = cardBuffer ? CardTray.runPage(cardBuffer, "cardtray") : null;
 
   const slot = document.getElementById("tutorial-slot");
@@ -899,6 +960,14 @@ if (!window.crossOriginIsolated) {
     });
   } else if (TUTORIAL_OFFERED) {
     WalletTutorial.offer(slot);
+  }
+
+  // The wallet half, beside the device and never on it. Not while the tutorial
+  // is running, which is its own companion and its own coordinator.
+  if (!TUTORIAL && window.WalletCoordinator) {
+    wallet = WalletCoordinator.mount({
+      container: document.getElementById("wallet-slot"), screen: canvas,
+    });
   }
 
   // debug is the worker's narration, not the console's: it decides whether the
@@ -914,6 +983,18 @@ if (!window.crossOriginIsolated) {
   document.addEventListener("keydown", (event) => {
     const channel = KEYMAP[event.key];
     if (channel === undefined) return;
+    // Except on a control inside the wallet, which wants these keys for itself:
+    // Enter presses the button under the cursor, the arrows move within a number
+    // field, and swallowing them here would leave the drawer openable by mouse
+    // only. A control, not the panel: opening the drawer moves focus into it for
+    // anyone driving by keyboard, and testing the panel rather than the control
+    // left the device's own keys dead from that moment on, while the panel was
+    // busy telling the visitor to go to Scan.
+    var control = event.target.closest
+      && event.target.closest("#wallet input, #wallet textarea, #wallet select,"
+                              + " #wallet button, #wallet [contenteditable],"
+                              + " #wallet-strip");
+    if (control) return;
     event.preventDefault();
     pressKey(channel);
   });

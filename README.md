@@ -137,10 +137,13 @@ the worked example and what the resulting hashes mean.
   browser's, because there is no zbar in WebAssembly.
 - **The wallet has no network at all, and the page has one host.** There is no
   backend, and the content security policy names exactly one origin beyond this
-  one: `signet.bitsaga.be`, the faucet and the two read-only proof endpoints of
-  Bitsaga Signet. Nothing asks it anything unless you start the multisig
-  tutorial below, and no part of the wallet can reach it in any case. With the
-  tutorial closed, the page still runs with the network off.
+  one: `signet.bitsaga.be`, the faucet, the read-only proof endpoints and the
+  address scan of Bitsaga Signet. Only the page asks it anything, and only while
+  the Simulator wallet is open or the multisig tutorial is running: what crosses
+  is an address to look up, a claim, a finished transaction to relay. No seed,
+  no key and no descriptor ever leaves the tab, and no part of the wallet
+  firmware can reach the network in any case. With both closed, the page still
+  runs with the network off.
 
 > If the zip hashes differ but the **contents** hash matches, the two builds hold
 > the same files and differ only in compression: some distributions ship zlib-ng.

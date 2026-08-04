@@ -6,11 +6,13 @@
 //
 // It does five things and nothing else:
 //
-//   * turn three account keys exported by the device into one 2 of 3 descriptor
+//   * turn account keys exported by the device into a descriptor: three of them
+//     into the tutorial's 2 of 3, or one of them into a single signature wallet
 //   * derive an address from that descriptor, which means real BIP32 public
 //     derivation and real secp256k1 point addition
-//   * build a PSBT spending one output, with everything the device needs in it
-//   * put two partial signatures from the device into a finished transaction
+//   * build a PSBT over the outputs being spent, with everything the device
+//     needs in it
+//   * put the signatures that come back into a finished transaction
 //   * talk to Bitsaga Signet over HTTPS: the faucet, and the proof endpoints
 //
 // It is written out rather than pulled in because every library that does this
@@ -133,6 +135,108 @@
     }).then(function (buffer) {
       return new Uint8Array(buffer);
     });
+  }
+
+  // ------------------------------------------------------------ RIPEMD-160
+  //
+  // The one hash a single signature address needs and the one hash a browser
+  // will not do: crypto.subtle knows SHA-1 and the SHA-2 family and nothing
+  // else, so unlike every other digest above it there is nowhere to borrow this
+  // from. Two lines of five rounds each over the same sixteen message words,
+  // with the word orders, rotations and constants from the specification.
+  //
+  // A 2 of 3 never needs it, which is why it was not here before: the witness
+  // program of a P2WSH is a SHA-256 and nothing more. A P2WPKH pays to the
+  // hash160 of a public key, and hash160 is this over a SHA-256.
+
+  var RMD_L = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8,
+    3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12,
+    1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2,
+    4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13];
+  var RMD_R = [
+    5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12,
+    6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2,
+    15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13,
+    8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14,
+    12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11];
+  var RMD_SL = [
+    11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8,
+    7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12,
+    11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5,
+    11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12,
+    9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6];
+  var RMD_SR = [
+    8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6,
+    9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11,
+    9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5,
+    15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8,
+    8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11];
+  var RMD_KL = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+  var RMD_KR = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+
+  function rotl32(value, bits) {
+    return ((value << bits) | (value >>> (32 - bits))) >>> 0;
+  }
+
+  // The five nonlinear functions, in the order the left line uses them; the
+  // right line walks the same five backwards, which is what round 4 - r is.
+  function rmdMix(round, x, y, z) {
+    if (round === 0) return (x ^ y ^ z) >>> 0;
+    if (round === 1) return ((x & y) | (~x & z)) >>> 0;
+    if (round === 2) return ((x | ~y) ^ z) >>> 0;
+    if (round === 3) return ((x & z) | (y & ~z)) >>> 0;
+    return (x ^ (y | ~z)) >>> 0;
+  }
+
+  function ripemd160(bytes) {
+    var h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+    // The length goes in the last eight bytes little endian, and only the low
+    // four of those can be reached by anything this hashes.
+    var padded = new Uint8Array((((bytes.length + 8) >> 6) + 1) * 64);
+    padded.set(bytes);
+    padded[bytes.length] = 0x80;
+    var bits = bytes.length * 8;
+    for (var b = 0; b < 4; b++) padded[padded.length - 8 + b] = (bits >>> (8 * b)) & 0xff;
+
+    var x = new Uint32Array(16);
+    for (var block = 0; block < padded.length; block += 64) {
+      for (var w = 0; w < 16; w++) {
+        x[w] = (padded[block + w * 4] | (padded[block + w * 4 + 1] << 8) |
+                (padded[block + w * 4 + 2] << 16) |
+                (padded[block + w * 4 + 3] << 24)) >>> 0;
+      }
+      var al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
+      var ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4];
+      for (var j = 0; j < 80; j++) {
+        var round = j >> 4;
+        var t = (rotl32((al + rmdMix(round, bl, cl, dl) + x[RMD_L[j]] +
+                         RMD_KL[round]) >>> 0, RMD_SL[j]) + el) >>> 0;
+        al = el; el = dl; dl = rotl32(cl, 10); cl = bl; bl = t;
+        t = (rotl32((ar + rmdMix(4 - round, br, cr, dr) + x[RMD_R[j]] +
+                     RMD_KR[round]) >>> 0, RMD_SR[j]) + er) >>> 0;
+        ar = er; er = dr; dr = rotl32(cr, 10); cr = br; br = t;
+      }
+      var carried = (h[1] + cl + dr) >>> 0;
+      h[1] = (h[2] + dl + er) >>> 0;
+      h[2] = (h[3] + el + ar) >>> 0;
+      h[3] = (h[4] + al + br) >>> 0;
+      h[4] = (h[0] + bl + cr) >>> 0;
+      h[0] = carried;
+    }
+    var out = new Uint8Array(20);
+    for (var o = 0; o < 5; o++) {
+      out[o * 4] = h[o] & 0xff;
+      out[o * 4 + 1] = (h[o] >>> 8) & 0xff;
+      out[o * 4 + 2] = (h[o] >>> 16) & 0xff;
+      out[o * 4 + 3] = (h[o] >>> 24) & 0xff;
+    }
+    return out;
+  }
+
+  function hash160(bytes) {
+    return sha256(bytes).then(ripemd160);
   }
 
   // ------------------------------------------------------------ base58
@@ -441,6 +545,177 @@
     });
   }
 
+  // ------------------------------------------- the single signature wallet
+
+  /**
+   * Just enough CBOR to read an exported account: unsigned integers, byte
+   * strings, text, arrays, maps, tags and the two booleans.
+   *
+   * A map comes back as a plain object under its integer keys, which is all a
+   * crypto-account and a crypto-hdkey have, and a tag as { tag, value },
+   * because in a UR the tag is what says which of them a thing is.
+   */
+  function cborItem(read) {
+    var first = read.byte();
+    var major = first >> 5, extra = first & 31;
+    var value = extra;
+    if (extra === 24) value = read.byte();
+    else if (extra === 25) value = (read.byte() << 8) | read.byte();
+    else if (extra === 26) {
+      value = 0;
+      for (var b = 0; b < 4; b++) value = (value * 256) + read.byte();
+    } else if (extra > 26) throw new Error("that CBOR is wider than an account key");
+
+    if (major === 0) return value;
+    if (major === 2) return read.take(value);
+    if (major === 3) return String.fromCharCode.apply(null, read.take(value));
+    if (major === 4) {
+      var list = [];
+      for (var i = 0; i < value; i++) list.push(cborItem(read));
+      return list;
+    }
+    if (major === 5) {
+      var map = {};
+      for (var k = 0; k < value; k++) {
+        var key = cborItem(read);
+        map[key] = cborItem(read);
+      }
+      return map;
+    }
+    if (major === 6) return { tag: value, value: cborItem(read) };
+    if (major === 7 && (value === 20 || value === 21)) return value === 21;
+    throw new Error("unexpected CBOR in that account key");
+  }
+
+  /**
+   * The crypto-hdkey buried in whatever the device exported.
+   *
+   * A crypto-account holds a list of output descriptors, and each of those is
+   * the same key wrapped in the tags that say which script type it is meant
+   * for. Which script type is the coordinator's choice here, not the device's,
+   * so only the key is taken: this file makes P2WPKH addresses out of it. A
+   * bare crypto-hdkey is that key with nothing around it.
+   */
+  function hdkeyIn(node) {
+    if (node && node.tag !== undefined) return hdkeyIn(node.value);
+    if (Array.isArray(node)) return hdkeyIn(node[0]);
+    if (node && node[3] instanceof Uint8Array && node[4] instanceof Uint8Array) return node;
+    if (node && Array.isArray(node[2])) return hdkeyIn(node[2]);
+    throw new Error("there is no account key in that payload");
+  }
+
+  /** A crypto-hdkey's origin as a path: [84, true, 1, true, 0, true] is /84h/1h/0h. */
+  function componentsToPath(components) {
+    var path = "";
+    for (var i = 0; i < components.length; i += 2) {
+      path += "/" + components[i] + (components[i + 1] ? "h" : "");
+    }
+    return path;
+  }
+
+  /**
+   * The account inside a UR payload, rebuilt as the tpub the rest of this file
+   * works in.
+   *
+   * A crypto-hdkey carries the pieces of an extended key rather than the key
+   * itself, so they go back together here in BIP32's own order: version, depth,
+   * the parent's fingerprint, the child number this node was derived at, the
+   * chain code, the key. Get the last two of those first three wrong and the
+   * base58 differs from every other wallet's while the addresses still come out
+   * right, which is a disagreement nobody notices until they try to restore.
+   */
+  function accountFromCbor(payload) {
+    var hdkey = hdkeyIn(cborItem(reader(payload)));
+    var origin = hdkey[6];                       // 6 is the origin keypath
+    if (origin && origin.tag !== undefined) origin = origin.value;
+    if (!origin || !Array.isArray(origin[1]) || origin[2] === undefined) {
+      throw new Error("that account key does not say which seed it came from");
+    }
+    var components = origin[1];
+    var depth = origin[3] === undefined ? components.length / 2 : origin[3];
+    var child = components.length
+      ? (components[components.length - 2] +
+         (components[components.length - 1] ? 0x80000000 : 0)) >>> 0
+      : 0;
+    return base58CheckEncode(concat([
+      TPUB_VERSION, new Uint8Array([depth]),
+      u32le(hdkey[8] || 0).reverse(),            // 8 is the parent's fingerprint
+      u32le(child).reverse(),
+      hdkey[4], hdkey[3],                        // 4 is the chain code, 3 the key
+    ])).then(function (tpub) {
+      return {
+        fingerprint: hex(u32le(origin[2]).reverse()),
+        path: componentsToPath(components),
+        tpub: tpub,
+      };
+    });
+  }
+
+  /**
+   * One exported account, however the device wrote it down.
+   *
+   * Export Xpub gives either the line the multisig flow uses, which is the same
+   * shape whatever the script type, or a UR: a crypto-account when the device
+   * animates it, a crypto-hdkey inside it. The UR case takes the payload the UR
+   * carries rather than the ur:... text, because a crypto-account rarely fits
+   * in one frame and putting the parts of an animated one back together is
+   * ur-decode.js's job, not this file's.
+   */
+  function parseAccount(exported) {
+    if (typeof exported !== "string") return accountFromCbor(exported);
+    if (/^ur:/i.test(exported.trim())) {
+      throw new Error("collect the parts of that UR first and pass what it carries");
+    }
+    var key = parseExportedKey(exported);
+    return toTpub(key.key).then(function (tpub) {
+      return { fingerprint: key.fingerprint, path: key.path, tpub: tpub };
+    });
+  }
+
+  /**
+   * One account key is a whole wallet, shaped like the 2 of 3 above so that
+   * everything downstream of it does not have to care which it has.
+   *
+   * wpkh rather than wsh: there is no script here at all. The output pays a key
+   * hash directly, which is why nothing in this wallet has a witness script to
+   * carry around and why the descriptor has no threshold in it.
+   */
+  function singleSigWallet(account) {
+    return {
+      keys: [account],
+      descriptor: "wpkh([" + account.fingerprint + account.path + "]"
+        + account.tpub + "/{0,1}/*)",
+      threshold: 1,
+    };
+  }
+
+  /**
+   * One address of that wallet, with everything a PSBT will need about it.
+   *
+   * The witness program of a P2WPKH is the hash160 of the public key, twenty
+   * bytes where a P2WSH has thirty-two, and the address is the same bech32
+   * encoding of it under the same testnet prefix. There is nothing to hand the
+   * device beyond the key: it rebuilds the script it signs over out of the
+   * program itself, which is what BIP143 means by the scriptCode of a P2WPKH.
+   */
+  function deriveAddressSingle(wallet, branch, index) {
+    var account = wallet.keys[0];
+    return parseExtendedKey(account.tpub).then(function (node) {
+      return derivePath(node, [branch, index]);
+    }).then(function (leaf) {
+      return hash160(leaf.key).then(function (program) {
+        return {
+          branch: branch, index: index,
+          fingerprint: account.fingerprint,
+          path: account.path + "/" + branch + "/" + index,
+          pubkey: leaf.key,
+          scriptPubkey: concat([new Uint8Array([0x00, 0x14]), program]),
+          address: bech32Address("tb", program),
+        };
+      });
+    });
+  }
+
   // ------------------------------------------------------------ transactions
 
   /** The outputs of a raw transaction, enough to find which one paid us. */
@@ -464,15 +739,31 @@
     return outputs;
   }
 
+  /**
+   * Version 2, no witness, every input at the same sequence: the transaction a
+   * PSBT carries in its global map, and the transaction whose id survives being
+   * signed.
+   *
+   * The inputs go out in the order they arrive and nothing sorts them, because
+   * BIP174 is positional: the second input map describes the second input here,
+   * the second witness will finish it, and a coordinator that reordered any one
+   * of those three would have the device sign one output and spend another.
+   */
+  function serialiseTx(inputs, outputs) {
+    return concat([u32le(2), varint(inputs.length)]
+      .concat(inputs.map(function (input) {
+        return concat([unhex(input.txid).reverse(), u32le(input.vout),
+                       varint(0), u32le(0xfffffffd)]);
+      }))
+      .concat([varint(outputs.length)])
+      .concat(outputs.map(function (out) {
+        return concat([u64le(out.value), varint(out.script.length), out.script]);
+      }))
+      .concat([u32le(0)]));
+  }
+
   function serialiseUnsigned(input, outputs) {
-    return concat([
-      u32le(2),
-      varint(1),
-      unhex(input.txid).reverse(), u32le(input.vout), varint(0), u32le(0xfffffffd),
-      varint(outputs.length),
-    ].concat(outputs.map(function (out) {
-      return concat([u64le(out.value), varint(out.script.length), out.script]);
-    })).concat([u32le(0)]));
+    return serialiseTx([input], outputs);
   }
 
   function keyPair(key, value) {
@@ -510,8 +801,122 @@
     ]);
   }
 
-  /** Every partial signature in a PSBT's first input, by public key. */
-  function partialSignatures(psbtBase64) {
+  /**
+   * How big the finished transaction will be, before it exists.
+   *
+   * A fee rate is only a fee once there is a size to multiply it by, and a
+   * P2WPKH spend's size is known in advance because every part of it is fixed
+   * length. Per input: 36 bytes of outpoint, an empty scriptSig, 4 of sequence,
+   * all of which weigh four times over, and a witness of a signature and a
+   * public key, which weighs once. Per output: 8 of value and the script with
+   * its length. Around all of them: version, the two counts, locktime, and the
+   * marker and flag, which are witness bytes.
+   *
+   * The signature is taken at its 72 byte maximum. A low-S DER signature is
+   * almost always 71, so this reads about a quarter of a virtual byte per input
+   * high: a fee a shade over is a transaction that confirms, and a fee a shade
+   * under is one that sits in nobody's mempool.
+   */
+  function estimateVsize(inputCount, scripts) {
+    var paid = scripts.reduce(function (n, script) {
+      return n + 8 + varint(script.length).length + script.length;
+    }, 0);
+    var base = 4 + varint(inputCount).length + inputCount * 41
+      + varint(scripts.length).length + paid + 4;
+    var witness = 2 + inputCount * (1 + 1 + 72 + 1 + 33);
+    return Math.ceil((base * 4 + witness) / 4);
+  }
+
+  // What Bitcoin Core will not relay: an output worth less than a third of what
+  // spending it would cost at the dust relay fee, which for a P2WPKH output is
+  // 294 satoshis.
+  var DUST = 294n;
+
+  /**
+   * A PSBT spending several outputs of a single signature wallet, paying
+   * several addresses, with the fee worked out from a rate.
+   *
+   *   inputs:   [{ txid, vout, value, source }], source from deriveAddressSingle
+   *   outputs:  [{ value, script }]
+   *   change:   an address from deriveAddressSingle, or nothing
+   *   feeRate:  satoshis per virtual byte
+   *
+   * Each input carries what the device cannot look up: what the output being
+   * spent is worth, because BIP143 signs that value, and the script it pays
+   * into, which is where the device gets the key hash it rebuilds the signed
+   * script from. And each carries its own derivation, so a device holding the
+   * seed can tell which of its keys this input is for.
+   *
+   * Nothing here states a sighash type. Left out, it means SIGHASH_ALL, which
+   * is the only thing any of this wants; written down, it is one more field for
+   * the device to disagree with.
+   */
+  function buildPsbtSingle(spend) {
+    var inputs = spend.inputs;
+    var outputs = spend.outputs.map(function (out) {
+      return { value: BigInt(out.value), script: out.script };
+    });
+    var funded = inputs.reduce(function (total, input) {
+      return total + BigInt(input.value);
+    }, 0n);
+    var paying = outputs.reduce(function (total, out) { return total + out.value; }, 0n);
+    var changeAt = -1;
+    if (funded < paying) throw new Error("these inputs do not cover that spend");
+
+    if (spend.change) {
+      var scripts = outputs.map(function (out) { return out.script; })
+        .concat([spend.change.scriptPubkey]);
+      var fee = BigInt(Math.ceil(estimateVsize(inputs.length, scripts) * spend.feeRate));
+      var left = funded - paying - fee;
+      if (left < 0n) throw new Error("these inputs do not cover that spend and its fee");
+      // Change worth less than it would cost to spend is change nobody ever
+      // moves, and an output the network may refuse to carry at all. Every real
+      // wallet drops it and lets the fee have it, which is what happens here.
+      if (left >= DUST) {
+        changeAt = outputs.length;
+        outputs.push({ value: left, script: spend.change.scriptPubkey });
+      }
+    }
+
+    var maps = [keyPair(new Uint8Array([0x00]), serialiseTx(inputs, outputs)),
+                new Uint8Array([0x00])];               // end of the globals
+    inputs.forEach(function (input) {
+      var source = input.source;
+      maps.push(keyPair(new Uint8Array([0x01]),
+                        concat([u64le(input.value), varint(source.scriptPubkey.length),
+                                source.scriptPubkey])));
+      maps.push(keyPair(concat([new Uint8Array([0x06]), source.pubkey]),
+                        concat([unhex(source.fingerprint)]
+                          .concat(pathToIndices(source.path).map(u32le)))));
+      maps.push(new Uint8Array([0x00]));
+    });
+    outputs.forEach(function (out, at) {
+      // The change output says whose it is, because a device that cannot
+      // recognise an output as its own has to treat it as money leaving, and
+      // would ask the visitor to approve sending the whole input away.
+      if (at === changeAt) {
+        // 0x02 here, not the 0x06 the input map above uses. BIP174 numbers the
+        // key types per map: 0x06 is PSBT_IN_BIP32_DERIVATION in an input and
+        // PSBT_OUT_TAP_TREE in an output, so writing 0x06 here does not fail,
+        // it silently files the derivation under taproot. The device then finds
+        // no derivation on the output, cannot recognise the change as its own,
+        // and warns the visitor that the whole input is leaving. It signs
+        // correctly and the change does come back, which is what made this
+        // survive every test that looked at the chain instead of the screen.
+        maps.push(keyPair(concat([new Uint8Array([0x02]), spend.change.pubkey]),
+                          concat([unhex(spend.change.fingerprint)]
+                            .concat(pathToIndices(spend.change.path).map(u32le)))));
+      }
+      maps.push(new Uint8Array([0x00]));
+    });
+    return toBase64(concat([unhex("70736274ff")].concat(maps)));
+  }
+
+  /**
+   * Every key/value map in a PSBT, in BIP174's order: the globals, then one per
+   * input, then one per output.
+   */
+  function psbtMaps(psbtBase64) {
     var read = reader(fromBase64(psbtBase64));
     if (hex(read.take(5)) !== "70736274ff") throw new Error("that is not a PSBT");
     var maps = [];
@@ -525,6 +930,12 @@
       }
       maps.push(map);
     }
+    return maps;
+  }
+
+  /** Every partial signature in a PSBT's first input, by public key. */
+  function partialSignatures(psbtBase64) {
+    var maps = psbtMaps(psbtBase64);
     var signatures = {};
     (maps[1] || []).forEach(function (entry) {
       if (entry.key[0] === 0x02) signatures[hex(entry.key.subarray(1))] = entry.value;
@@ -568,6 +979,53 @@
     return sha256d(body).then(function (digest) {
       return { hex: hex(signed), txid: hex(digest.reverse()) };
     });
+  }
+
+  /**
+   * One signature per input, and the transaction is finished.
+   *
+   * The witness of a P2WPKH input is two items and always the same two: the
+   * signature the device made, and the public key it made it with. The key is
+   * what the output being spent committed to, and the signature is what says
+   * this spend of it was allowed.
+   *
+   * The transaction comes back out of the PSBT rather than being built a second
+   * time from the inputs, because what is broadcast has to be what was signed,
+   * byte for byte, and the PSBT holds the only copy of it both sides saw. The
+   * witnesses go in in input order for the same reason the inputs went out in
+   * the order they arrived.
+   */
+  function finaliseSingle(psbtBase64, inputs) {
+    var maps = psbtMaps(psbtBase64);
+    var unsigned = null;
+    maps[0].forEach(function (entry) {
+      if (entry.key.length === 1 && entry.key[0] === 0x00) unsigned = entry.value;
+    });
+    if (!unsigned) throw new Error("that PSBT does not carry a transaction");
+
+    var witnesses = inputs.map(function (input, at) {
+      var pubkey = input.source.pubkey;
+      var wanted = hex(pubkey);
+      var signature = null;
+      (maps[1 + at] || []).forEach(function (entry) {
+        if (entry.key[0] === 0x02 && hex(entry.key.subarray(1)) === wanted) {
+          signature = entry.value;
+        }
+      });
+      if (!signature) throw new Error("input " + at + " came back without a signature");
+      return concat([varint(2), varint(signature.length), signature,
+                     varint(pubkey.length), pubkey]);
+    });
+
+    // The same bytes with a marker, a flag and the witnesses spliced in, as in
+    // finalise() above: version, then 0x00 0x01, then everything up to the
+    // locktime, then the witnesses, then the locktime.
+    return hex(concat([
+      unsigned.subarray(0, 4), new Uint8Array([0x00, 0x01]),
+      unsigned.subarray(4, unsigned.length - 4),
+      concat(witnesses),
+      unsigned.subarray(unsigned.length - 4),
+    ]));
   }
 
   // ------------------------------------------------------------ the network
@@ -636,10 +1094,15 @@
     hex: hex, unhex: unhex, toBase64: toBase64, fromBase64: fromBase64,
     buildWallet: buildWallet,
     deriveAddress: deriveAddress,
+    parseAccount: parseAccount,
+    singleSigWallet: singleSigWallet,
+    deriveAddressSingle: deriveAddressSingle,
     transactionOutputs: transactionOutputs,
     buildPsbt: buildPsbt,
+    buildPsbtSingle: buildPsbtSingle,
     partialSignatures: partialSignatures,
     finalise: finalise,
+    finaliseSingle: finaliseSingle,
     network: network,
   };
 })(typeof self !== "undefined" ? self : this);
