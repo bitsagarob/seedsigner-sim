@@ -1012,6 +1012,24 @@ def main(argv) -> int:
                   first or shown[:60] or "no verify block")
             shot(page, "04-connected")
 
+            # And then the check itself, which is the reason the address is
+            # offered at all. The panel holds it at the camera, the device reads
+            # it and walks its own derivation path looking for it. That search is
+            # a BaseThread, and this simulator drops those because most of them
+            # are animation loops that would never return; dropped, the screen
+            # sat on an index that never moved and its Skip 10 fed a counter
+            # nobody read. It runs inline now, bounded, so a match comes back at
+            # once and a miss gives up instead of wedging the worker.
+            page.locator("#wallet button", has_text="Show it to the device").first.click()
+            page.wait_for_timeout(400)
+            mark = log.mark()
+            press(page, "Enter")                      # the prompt's own Scan
+            found = advance(page, log, "SeedAddressVerificationSuccessScreen", 8)
+            check("the device finds the address on its own derivation path",
+                  found, log.last_screen() or "nothing")
+            device_shot(page, "04b-address-verified")
+            go_home(page, log)
+
             # The one place a generated seed can be checked against arithmetic
             # this file did itself. The fingerprint came out of the key origin
             # the device wrote into its export, so it is the device's answer to

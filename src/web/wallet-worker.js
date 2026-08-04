@@ -193,15 +193,52 @@ class _NoThread:
         self.name, self.daemon = name or "nothread", daemon
         self._done = False
 
-    # The controller blocks waiting for this one to set up storage, and its
-    # run() is a one-shot rather than a loop, so it has to run even though it
-    # is a BaseThread. Without it the wallet hangs forever after the splash.
-    RUN_INLINE_ANYWAY = {"BackgroundImportThread"}
+    # The controller blocks waiting for BackgroundImportThread to set up storage,
+    # and its run() is a one-shot rather than a loop, so it has to run even
+    # though it is a BaseThread. Without it the wallet hangs forever after the
+    # splash.
+    #
+    # The address verification threads are the other kind of exception. They look
+    # like animation loops -- a while over keep_running -- but they are a search
+    # that ends: they walk the derivation path looking for one address and stop
+    # when they find it. Dropped, nothing ever searched, so Verify Address sat
+    # showing an index that never moved and its Skip 10 incremented a counter no
+    # thread was reading. Run, they answer at once for an address that really is
+    # the wallet's, which is the case worth having work.
+    RUN_INLINE_ANYWAY = {
+        "BackgroundImportThread",
+        "BruteForceAddressVerificationThread",
+        "ExpandedBruteForceAddressVerificationThread",
+    }
+
+    # How far one of those searches may walk before this gives up on it. Upstream
+    # has no bound on the not-found case because on hardware it is a real thread
+    # somebody can cancel; here it would be the whole worker, wedged. A wallet
+    # that has just exported its own key is being asked about its own first
+    # address, so this only has to be deep enough to be honest about a miss.
+    INLINE_SEARCH_LIMIT = 100
 
     def _is_animation_loop(self):
         if type(self).__name__ in self.RUN_INLINE_ANYWAY:
             return False
         return hasattr(self, "keep_running")
+
+    def _bound_search(self):
+        """Stop a search thread walking for ever, since nothing else can."""
+        counter = getattr(self, "threadsafe_counter", None)
+        if counter is None or not hasattr(counter, "increment"):
+            return
+        increment = counter.increment
+        thread = self
+
+        def bounded(step=1):
+            increment(step)
+            if counter.cur_count >= _NoThread.INLINE_SEARCH_LIMIT:
+                js_log(f"inline search {type(thread).__name__} gave up at "
+                       f"{counter.cur_count}")
+                thread.keep_running = False
+
+        counter.increment = bounded
 
     def start(self):
         js_log(f"thread start: {type(self).__name__} "
@@ -209,6 +246,8 @@ class _NoThread:
         if self._is_animation_loop() or self._done:
             return
         self._done = True
+        if type(self).__name__ in _NoThread.RUN_INLINE_ANYWAY and hasattr(self, "keep_running"):
+            self._bound_search()
         try:
             self.run()
         except Exception as exc:
