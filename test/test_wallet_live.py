@@ -104,7 +104,10 @@ from playwright.sync_api import sync_playwright
 # The origin the API allows, and the path the deployed site serves the page at.
 # No ?tutorial=, because the wallet panel is mounted on every page the tutorial
 # is not running on and would not exist if it were.
-URL = "https://bitsaga.be/seedsigner-simulator/wallet.html?debug=1&firmware=smartcard"
+# wallet=1 goes past the game: the page boots into DOOM and fetches the wallet
+# only on KEY1, KEY2, KEY3, and this file is about the wallet.
+URL = ("https://bitsaga.be/seedsigner-simulator/wallet.html"
+       "?debug=1&wallet=1&firmware=smartcard")
 
 # The SeedQR the fake camera plays: the published BIP39 test vector
 # "army van defense carry jealous true garbage claim echo media make crunch",

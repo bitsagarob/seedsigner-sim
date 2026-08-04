@@ -540,7 +540,10 @@ def main() -> int:
         # ceremony and turns the page into a lesson, so it is behind the URL.
         # ?tutorial=offer is the button that used to be on every visit.
         bare = context.new_page()
-        bare.goto(f"{ORIGIN}/wallet.html")
+        # wallet=1, or this waits on DOOM: the page boots into the game and
+        # fetches the wallet only on the unlock. What is being asked here is
+        # whether the wallet page offers a tutorial, not what boots first.
+        bare.goto(f"{ORIGIN}/wallet.html?wallet=1")
         bare.wait_for_timeout(2500)
         check("the page at rest says nothing about a tutorial",
               bare.locator("#start-tutorial").count() == 0

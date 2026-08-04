@@ -144,6 +144,13 @@
   }
   #status { color: #7c848f; min-height: 0; }
   #status:empty { display: none; }
+  /* The one line that overrides the device on purpose. On hardware the game is
+     camouflage and the sequence is a secret; this page is titled "wallet
+     simulator" and is linked as "open the simulator", so a genuinely hidden
+     wallet would be a wallet nobody found. Quiet rather than hidden: it is the
+     same grey as the status line above it and goes away with the game. */
+  #doom-hint { margin: 0; }
+  #doom-hint:empty { display: none; }
   header {
     display: flex; flex-wrap: wrap; align-items: center;
     justify-content: center; gap: .5rem;
@@ -496,6 +503,10 @@
         <p id="network"></p>
       </div>
       <p id="status">starting…</p>
+      <!-- What the side buttons are for while the device is playing DOOM, and
+           why the wallet is not up. Filled in by the boot below and emptied
+           again the moment the wallet has the device. -->
+      <p class="hint" id="doom-hint"></p>
       <!-- Only offered where it is any use: on a phone, where the page around the
            device is what is making the device small. -->
       <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
@@ -526,6 +537,12 @@
 <script src="wallet-tutorial.js"></script>
 <script src="wallet-coordinator.js"></script>
 <script src="wallet-track.js"></script>
+<!-- What the device boots into, and the wallet behind it. doom-run.js is DOOM
+     and is a placeholder until it is built; doom-boot.js is the boot itself and
+     works either way. Both are small and neither fetches the engine or the WAD:
+     that is start()'s job, and it only happens on a page that boots the game. -->
+<script src="doom-run.js"></script>
+<script src="doom-boot.js"></script>
 <script>
 // Offline cache. Registered late and failure-tolerant: the simulator must work
 // exactly the same if this is unavailable or blocked.
@@ -574,6 +591,20 @@ const TUTORIAL = TUTORIAL_OFFERED && TUTORIAL_ASKED !== "offer";
 // device-plus-companion split rather than two copies of one.
 document.body.classList.toggle("paired", TUTORIAL);
 
+// Straight to the wallet, past the game.
+//
+// The device boots into DOOM and the wallet is behind the unlock, which is the
+// device's own behaviour and the reason the page is interactive in a second
+// instead of forty. But a deep link to a wallet has to land on a wallet: the
+// test suite drives the firmware directly, the tutorial drives it for a
+// visitor, and anyone handed "here, look at this screen" should get that
+// screen. ?wallet is that link, and asking about the tutorial at all is the
+// same request by another name -- nobody arrives at ?tutorial for a game.
+//
+// Presence is the request, as with ?debug: there is nothing to spell wrong.
+const WALLET_ASKED = new URLSearchParams(location.search).has("wallet");
+const SKIP_DOOM = WALLET_ASKED || TUTORIAL_ASKED !== null;
+
 // How the page names each firmware, on the switch and in the sentence inside
 // the details panel. The switch carries the name each build calls itself --
 // ShieldSigner is the name on the fork's own boot splash -- and the sentence,
@@ -601,6 +632,7 @@ const canvas = document.getElementById("screen");
 const deviceEl = document.getElementById("device");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
+const doomHint = document.getElementById("doom-hint");
 const networkEl = document.getElementById("network");
 
 // The two header panels are popovers: they cover the page rather than pushing
@@ -780,7 +812,18 @@ const KEY_NAMES = [null, "up", "down", "left", "right", "select", "key1", "key2"
 // anything here, and separate from sendKey because the tutorial drives the
 // device through that: a walkthrough pressing two hundred keys by itself would
 // bury the handful a visitor chose to press.
-function pressKey(channel) {
+//
+// One path, switched by what is running: the same eight keys drive DOOM before
+// the unlock and the wallet after it, because they are the same eight buttons
+// on the same device. down is true or false for a key genuinely held and
+// released, which only the keyboard can say and only DOOM has any use for; a
+// drawn key leaves it undefined, because the shell reports one press per finger
+// and no release at all.
+function pressKey(channel, down) {
+  if (window.DoomBoot && DoomBoot.key(channel, down)) return;
+  // The wallet knows only presses: it reads GPIO edges going down and there is
+  // no message that means a button came back up.
+  if (down === false) return;
   sendKey(channel);
   track.event("device", "key", KEY_NAMES[channel] || String(channel));
 }
@@ -929,10 +972,15 @@ function narrate(message) {
   }
 }
 
-if (!window.crossOriginIsolated) {
-  statusEl.textContent = "this page needs cross-origin isolation, which the server is not sending";
-  statusEl.className = "err";
-} else {
+// The whole of the wallet: the worker that runs it, the channels that reach it,
+// and the companion beside it. Called on the unlock, or straight away by anyone
+// who asked for the wallet rather than for the device it is hiding behind.
+//
+// Nothing in here runs before then, and that is the point: constructing the
+// worker is what starts the 26MB Pyodide download and the forty seconds of
+// booting CPython in WebAssembly that used to be the first thing this page did
+// to everybody, including the people who never pressed a key.
+function startWallet() {
   const worker = new Worker("wallet-worker.js");
 
   worker.onmessage = (event) => {
@@ -1017,8 +1065,19 @@ if (!window.crossOriginIsolated) {
     type: "init", sharedBuffer: shared, cameraBuffer, cardBuffer,
     width: W, height: H, debug: true, firmware: FIRMWARE,
   });
+}
 
-  document.addEventListener("keydown", (event) => {
+if (!window.crossOriginIsolated) {
+  statusEl.textContent = "this page needs cross-origin isolation, which the server is not sending";
+  statusEl.className = "err";
+} else {
+  // The keyboard, out here rather than inside the wallet: the same eight keys
+  // drive DOOM before the unlock and the wallet after it, and pressKey is what
+  // knows which of them is holding the device. keyup is only ever any use to
+  // DOOM -- a held arrow is how anybody walks anywhere, and the wallet reads
+  // GPIO edges going down and has no message for a button coming back up -- but
+  // it goes down the one path with everything else rather than round the side.
+  function keyEvent(event) {
     const channel = KEYMAP[event.key];
     if (channel === undefined) return;
     // Except on a control inside the wallet, which wants these keys for itself:
@@ -1034,8 +1093,46 @@ if (!window.crossOriginIsolated) {
                               + " #wallet-strip");
     if (control) return;
     event.preventDefault();
-    pressKey(channel);
-  });
+    pressKey(channel, event.type === "keydown");
+  }
+  document.addEventListener("keydown", keyEvent);
+  document.addEventListener("keyup", keyEvent);
+
+  // Which of the two the device boots into. DOOM unless the URL asked past it,
+  // and the wallet anyway if the game is not built into this copy of the page.
+  if (SKIP_DOOM || !window.DoomBoot) {
+    startWallet();
+  } else {
+    doomHint.textContent = "The three side buttons open the wallet: press 1, then 2, then 3.";
+    DoomBoot.boot({
+      width: W, height: H, paint,
+      status(message) { statusEl.textContent = message; },
+
+      // The sequence, spelled. DOOM has already stopped by the time this is
+      // called, so the wallet gets a panel nothing else is drawing on.
+      onUnlock() {
+        track.event("page", "doom", "unlock");
+        doomHint.textContent = "";
+        // Black, rather than DOOM's last frame frozen under a line saying the
+        // wallet is starting. The device is booting into something else, and
+        // this is what a device doing that looks like.
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        statusEl.textContent = "starting…";
+        startWallet();
+      },
+
+      // Said, and left up. This is a fault rather than a mode: the page is
+      // meant to boot into a game and could not, and whoever deployed it should
+      // be able to see that from the page instead of from a console.
+      onUnavailable(reason) {
+        track.event("page", "doom", "unavailable");
+        doomHint.textContent = "DOOM is not available here (" + reason
+                             + "), so the wallet is starting instead.";
+        statusEl.textContent = "starting…";
+        startWallet();
+      },
+    });
+  }
 }
 </script>
 </body>

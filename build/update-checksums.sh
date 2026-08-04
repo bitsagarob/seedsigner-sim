@@ -86,6 +86,15 @@ fi
 # build/fetch-assets.sh hash-checks where it fetches it and .gitignore keeps out
 # of the repository, and __pycache__, which is generated and which the build
 # refuses to package anyway.
+#
+# DOOM is excluded for the same reason and it matters more here, because these
+# land in src/web itself rather than in a directory of their own: doom.js,
+# doom.wasm and doom-run.js are built by build/build-doom-wasm.sh from a pinned
+# doomgeneric, and the WAD is fetched from Freedoom's own release. Both are
+# hash-checked where they are produced and both are gitignored. Left in, this
+# manifest would say one thing on a machine that had built the game and another
+# on a machine that had not, which is the one thing a manifest may never do.
+# doom-boot.js is not excluded: it is this repository's own source.
 
 SERVED_DIRS="src/web src/shims"
 PACKAGED_DIRS="src/smartcard src/fakes"
@@ -97,7 +106,9 @@ list_dirs() {
         find "${ROOT}/${dir}" \
              -name '__pycache__' -prune -o \
              -path "${ROOT}/src/web/pyodide" -prune -o \
-             -type f ! -name '*.pyc' -print
+             -type f ! -name '*.pyc' \
+                     ! -name 'doom.js' ! -name 'doom.wasm' \
+                     ! -name 'doom-run.js' ! -name '*.wad' -print
     done | while IFS= read -r file; do
         printf '%s\n' "${file#"${ROOT}/"}"
     done | LC_ALL=C sort

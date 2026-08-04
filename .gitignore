@@ -26,3 +26,13 @@ __pycache__/
 .DS_Store
 *.swp
 *~
+
+# Built and fetched, never committed, for the same reason the wallet zips and
+# Pyodide are not: build/build-doom-wasm.sh produces the engine from a pinned
+# doomgeneric, and the WAD is 28 MB of Freedoom fetched from its own release.
+# What is served is provably built from the pins rather than pasted in.
+src/web/doom.js
+src/web/doom.wasm
+src/web/doom-run.js
+src/web/*.wad
+build/out/doom/

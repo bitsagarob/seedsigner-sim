@@ -17,7 +17,7 @@
  * blocks inside SeedSigner's controller loop and SharedArrayBuffer is the only
  * channel that can reach it.
  */
-const VERSION = "sim-v6";
+const VERSION = "sim-v7";
 const CACHE = "seedsignersim-" + VERSION;
 
 // Small enough to fetch up front so a first-run offline load still works.
@@ -37,6 +37,16 @@ const SHELL = [
   "./wallet-coordinator.js",
   "./wallet-track.js",
   "./seedsigner-device.js",
+  // The boot itself, and the placeholder that stands in for DOOM. Both are
+  // small and both are on every load. What is deliberately not here is DOOM:
+  // doom.js, doom.wasm and the WAD are about ten megabytes gzipped, and
+  // precaching them would charge every visitor for a game before they had asked
+  // for one -- including the ones who arrived at ?wallet and will never see it.
+  // Nothing big is in this list and never has been, for exactly that reason:
+  // Pyodide and the wallet zip are not here either. They are fetched when they
+  // are actually wanted, and kept by the rules below.
+  "./doom-boot.js",
+  "./doom-run.js",
   "./jsQR.js",
   "./browser_camera.py",
   "./browser_qr.py",
@@ -51,7 +61,13 @@ const SHELL = [
 // not: it is rebuilt whenever the Python side changes, and cache-first with
 // no revalidation meant a returning visitor kept the old wallet forever while
 // getting fresh JS around it -- the worst version, mismatched halves.
-const IMMUTABLE = /\/(pyodide\/|fonts\/|icon-|apple-touch-icon)/;
+//
+// The WAD belongs here for the opposite reason to the one that kept it out of
+// the shell above: it is a published Freedoom release that never changes, and
+// network-first would re-download twenty-eight megabytes on every visit to a
+// page that is meant to be playable in a second. doom.wasm goes with it. The
+// glue in doom.js does not: it is built here and moves when the build does.
+const IMMUTABLE = /\/(pyodide\/|fonts\/|icon-|apple-touch-icon|doom\.wasm|freedoom\d*\.wad)/;
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {

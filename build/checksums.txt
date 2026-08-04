@@ -46,6 +46,7 @@
 09f9ae5c73128719261d757ff5184e79912158ceb21dc650e11243da093644f3  src/shims/browser_display.py
 2e1b0500e002f33684e9187a9c3d2752f526ce6e78f0e02feea238e92c0dee5b  src/shims/browser_qr.py
 0243ccf633097906b763839cd4b2d9f92fccd042bac1fd11ee7be60f31e78687  src/web/apple-touch-icon.png
+9a57aa6f3bc855eec5be23a9e56bb6d0435e02e1848dcd625c6296482064ac7f  src/web/doom-boot.js
 1ebb8267bb112587c9739a7f30fd9197c3e0137a0fcd4677f6a8677b6fa307f5  src/web/icon-192.png
 2c740b578143c67bbca1f950c33fe62d2a06fd22d5c0a7adf58348dc648e09bf  src/web/icon-512.png
 6d80f38a10e12d778a000ecea1c1036fe3075a708559d56b8bbf8e4678e470bc  src/web/index.html
@@ -54,7 +55,7 @@ bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.j
 75d7bbeb31dfd951e2d2dcd768f0c42e54faaf10d4fd23f1fa4c50e99abbdc10  src/web/qr-encode.js
 7a2aa1d84ebd41aedb415fbe36857e36a70d5f04558ad5f9a23a14bacfe5721e  src/web/seedsigner-device.js
 ebdba8ffca304f3637c6633d84a460f1887516a752ca7b8a80cecc7d6c5a4a08  src/web/signet-coordinator.js
-cea47a8d3113283a6be2623c13b41e48fd2d273eee3ab8b2180d768472b19c74  src/web/sw.js
+c1c7765eff50f054bfc035afdd25e98198acedf925f81c5e3f372d7de8cf5ed4  src/web/sw.js
 7b4b618d5bf889defaf7fcbdf962c43b9ad3b34ce7c5537d4a1200269ce62127  src/web/ur-decode.js
 e904431719d48c07b0f0b203ef9218b0482c03e1c658a03e4fa2f829b323a13d  src/web/wallet-camera.js
 e832c8795b3fe082f8420509902847ad5ecd31a11334007db8bec2bad97038e8  src/web/wallet-cards.js
@@ -62,7 +63,7 @@ d6361ecad60e76c475597670a4d4691448fff89e4dc0864d7334d7f6a74e616b  src/web/wallet
 c2b6c3dab126fc5ca5803616ba7e2ec6e58ac41b6d91a7513dd934211cf863d6  src/web/wallet-track.js
 5fb474ace6000daad38a40e4919cd5cf55436bbf6b0069cf180d3bbf83093f2c  src/web/wallet-tutorial.js
 8f7795bfb9e0b7ac87dfe3b4067afb6b4b2f3411fbd9091d8f40b2e800ae9ac3  src/web/wallet-worker.js
-4e33a18b997e9c1f85c66c5e02d9422ead028ed145ac710926f9611490d71d09  src/web/wallet.html
+7e1d868471fc4e1ac5c67685e5cd96801a033ad3aa8f857824c9e69009ef98a0  src/web/wallet.html
 
 # The stand-in packages, which build/build-wallet-zip.sh copies out of the working
 # tree and into a wallet zip whole. Every other input to that zip is pinned by a

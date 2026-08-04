@@ -87,8 +87,16 @@ def page_error(message):
     return not any(path in url for path in ANALYTICS)
 
 def wallet_url(page="wallet.html", **params):
-    """A URL for the simulator, with tracing on and the firmware named."""
+    """A URL for the simulator, with tracing on and the firmware named.
+
+    And past the game. The page boots into DOOM and only fetches the wallet when
+    KEY1, KEY2, KEY3 is pressed, which is the device's own behaviour and exactly
+    what this suite does not want: every test here is about the firmware, and
+    without this each of them would sit and time out in front of a game. A test
+    that wants the game asks for it by building its own URL.
+    """
     params.setdefault("debug", "1")
+    params.setdefault("wallet", "1")
     params.setdefault("firmware", FIRMWARE)
     return f"{BASE_URL}/{page}?{urlencode(params)}"
 
