@@ -67,6 +67,25 @@ def find_asset(name):
     return None
 
 
+
+# The analytics endpoints are served by the site, not by this repository: a
+# clone serves no /mt.js and no /mt.php, which is a state wallet-track.js is
+# written to survive silently. The browser still logs the failed fetch as a
+# console error, so the two are dropped here rather than left to fail every
+# suite that asks whether the page had a clean run. Anything else is kept.
+ANALYTICS = ("/mt.js", "/mt.php")
+
+
+def page_error(message):
+    """Is this console message a real problem, rather than the missing tracker?
+
+    The URL is in the message's location rather than its text: a failed fetch
+    logs "Failed to load resource: the server responded with a status of 404"
+    and nothing else, so matching on the text alone drops nothing at all.
+    """
+    url = (message.location or {}).get("url", "")
+    return not any(path in url for path in ANALYTICS)
+
 def wallet_url(page="wallet.html", **params):
     """A URL for the simulator, with tracing on and the firmware named."""
     params.setdefault("debug", "1")

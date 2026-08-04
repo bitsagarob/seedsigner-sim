@@ -36,9 +36,17 @@ def switch_state(page):
 
 
 def firmware_line(page):
-    """The sentence saying what is running, which lives inside the panel now."""
-    page.locator("#build").evaluate("node => { node.open = true; }")
-    return page.locator("#firmware-line").inner_text()
+    """The sentence saying what is running, which lives inside the panel now.
+
+    Shut again afterwards. The panel hangs over the page rather than pushing it
+    down, and under stock the page is short enough that an open one covers the
+    firmware switch in the footer and swallows the click meant for it.
+    """
+    panel = page.locator("#about")
+    panel.evaluate("node => { node.open = true; }")
+    said = page.locator("#firmware-line").inner_text()
+    panel.evaluate("node => { node.open = false; }")
+    return said
 
 
 def main() -> int:
@@ -49,7 +57,8 @@ def main() -> int:
         page = browser.new_context(viewport={"width": 720, "height": 900}).new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        page.on("console", lambda m: errors.append(m.text)
+                if m.type == "error" and harness.page_error(m) else None)
 
         page.goto(harness.wallet_url(firmware="smartcard"))
         page.wait_for_selector("#firmware-switch button")

@@ -112,8 +112,11 @@ def panel_dependencies(page):
 
 def open_panel(page, url):
     page.goto(url)
-    page.wait_for_selector("#build > summary")
-    page.locator("#build > summary").click()
+    # One panel now, behind the i: what the simulator is and what it was built
+    # from are the same argument, and the half that makes the claim was not the
+    # half that let you check it.
+    page.wait_for_selector("#about > summary")
+    page.locator("#about > summary").click()
     # Filled in from build-info.json, so waiting for the first dependency is
     # waiting for that fetch rather than for a fixed number of milliseconds.
     page.wait_for_selector("#build-deps li")

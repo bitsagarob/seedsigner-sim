@@ -33,7 +33,8 @@ def main() -> int:
         page = browser.new_context(viewport={"width": 720, "height": 900}).new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        page.on("console", lambda m: errors.append(m.text)
+                if m.type == "error" and harness.page_error(m) else None)
         page.goto(harness.wallet_url())
         page.wait_for_selector(".cardtray-card")
 

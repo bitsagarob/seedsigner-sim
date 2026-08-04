@@ -111,9 +111,16 @@
   #about > summary:hover { color: #f7931a; border-color: #f7931a; }
   #about > div {
     position: absolute; left: 50%; transform: translateX(-50%); z-index: 10;
-    margin-top: .5rem; max-width: min(46rem, calc(100vw - 2rem));
+    margin-top: .5rem; box-sizing: border-box;
+    width: min(46rem, calc(100vw - 2rem));
     background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
     padding: 1rem 1.25rem; font-size: .88rem; color: #b6bec8; text-align: left;
+    /* Bounded and scrolling itself. Unbounded it is long enough to cover the
+       device and the controls under it and swallow every click that lands on
+       them, which is exactly what it did the first time it was moved up here.
+       The script below closes it on a click outside or on Escape. */
+    max-height: min(70vh, 42rem); overflow: auto; overscroll-behavior: contain;
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, .55);
   }
   #about > div a { color: #f7931a; }
   #about ul { padding-left: 1.1rem; }
@@ -121,9 +128,14 @@
   #status.ready { color: #22c55e; }
   #status.err { color: #ef4444; white-space: pre-wrap; max-width: 70ch; }
   .hint { color: #7c848f; font-size: .9em; }
+  /* Red, in the same palette as the failed-hash verdict and the error status,
+     because this is the one line on the page that is about losing money rather
+     than about how anything works. It used to open with the word "simulator",
+     which the title, the note and the panel all say already; what is left is the
+     instruction, which is the only part worth reading twice. */
   .warn {
-    color: #e8c07a; font-size: .9em; text-align: center; margin: 0;
-    border: 1px solid #4a3d22; background: #211b10;
+    color: #f18f8f; font-size: .9em; text-align: center; margin: 0;
+    border: 1px solid #7f1d1d; background: #1b0f10;
     border-radius: 8px; padding: .5rem .9rem;
   }
   /* The half of the warning that is only true of mainnet. The risk of typing a
@@ -156,39 +168,10 @@
     color: #f7931a; border-color: #f7931a; background: #16181c; cursor: default;
   }
   #firmware-switch button:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
-  /* The details panel, beside the title with the i and in the same small idiom:
-     both are the page talking about itself, and neither is worth a strip across
-     the page while it is shut. Dark fill, thin border, and Bitcoin orange only
-     where something is on or has come out right, as everywhere else here. */
-  #build { font-size: .78rem; }
-  #build > summary {
-    list-style: none; display: inline-block; cursor: pointer; white-space: nowrap;
-    font: inherit; color: #8b939e; background: #1d2026; border: 1px solid #2a2e35;
-    border-radius: 5px; padding: .1rem .45rem;
-  }
-  #build > summary::-webkit-details-marker { display: none; }
-  #build > summary:hover { color: #d7dbe0; border-color: #3a3f47; }
-  #build[open] > summary { color: #f7931a; border-color: #f7931a; background: #16181c; }
-  #build > summary:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
-  #build > div {
-    /* Out of the flow like the i panel next to it, or opening it would push the
-       device down the page. Border box, because the padding below is a fifth of
-       a phone's width and a content-box panel would push the page sideways. */
-    position: absolute; left: 50%; transform: translateX(-50%); z-index: 10;
-    box-sizing: border-box; width: min(46rem, calc(100vw - 2rem));
-    margin-top: .5rem; text-align: left; font-size: 1.15em;
-    background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
-    padding: 1rem 1.25rem; color: #b6bec8;
-  }
-  /* Both header panels hang over the page rather than pushing it down, so both
-     are bounded and scroll themselves. Unbounded, this one is long enough to
-     cover the device and the controls under it and swallow every click that
-     lands on them, which is exactly what it did the first time it was moved up
-     here. The script below closes them on a click outside or on Escape. */
-  #about > div, #build > div {
-    max-height: min(70vh, 42rem); overflow: auto; overscroll-behavior: contain;
-    box-shadow: 0 1rem 2rem rgba(0, 0, 0, .55);
-  }
+  /* The build half of the panel: same voice and same column as the prose above
+     it, set off only by its headings, because it is the end of one argument
+     rather than a second panel that happens to live here. */
+  #build { margin-top: 1.4rem; border-top: 1px solid #2a2f36; padding-top: .2rem; }
   #build a { color: #f7931a; }
   /* What is running, in a sentence, at the top of the panel where the rest of
      the same material lives. */
@@ -230,7 +213,7 @@
     border-radius: 6px; padding: .05rem .55rem;
   }
   body.mainnet .note { display: none; }
-  body.mainnet .warn { color: #f3c08a; border-color: #7b4a1e; background: #2b1a09; }
+  body.mainnet .warn { color: #ff9c9c; border-color: #b91c1c; background: #290e0e; }
   /* Stock SeedSigner has no smartcard code at all, so under it the tray is
      never built and this leaves no gap behind. */
   #cardtray:empty { display: none; }
@@ -311,97 +294,106 @@
 <body>
   <header>
     <h1>SeedSigner wallet simulator</h1>
+    <!-- One panel, not two.
+
+         It used to be split: an "i" that said what the simulator is, and a
+         Technical details button beside it that said what it was built from.
+         They were the same argument in two halves, and the half that made the
+         claim was not the half that let you check it, so a reader had to open
+         both and join them up. This is the whole thing in one order: what it is,
+         what is faked, what that costs you, what is running right now, and how
+         to prove all of it without believing this page.
+
+         The rows below the prose are filled in from wallet-<firmware>.build-info.json,
+         which the build writes beside the zip from the pins it built from, except
+         the received hash, which comes from the worker. -->
     <details id="about">
-      <summary aria-label="How this works" title="How this works">i</summary>
+      <summary aria-label="About this simulator" title="About this simulator">i</summary>
       <div>
-        <p><strong>This is device firmware, not a re-creation of it</strong>: the
-        actual Python that runs on a SeedSigner, in this tab. Two builds are on
-        offer, stock SeedSigner and the 3rdIteration smartcard fork; the control
-        under the device says which one is running and switches between them.</p>
-        <p>Its Python is executed by Pyodide (CPython compiled to WebAssembly) inside a
-        Web Worker. The wallet code itself is unmodified; only the places it
-        reaches for hardware are replaced.</p>
+        <p><strong>This is device firmware, not a re-creation of it.</strong> The
+        actual Python that runs on a SeedSigner runs here, executed by Pyodide
+        (CPython compiled to WebAssembly) in a Web Worker. The wallet's own code
+        is untouched: nothing in it is patched, and the pinned release it is built
+        from is rebuilt below rather than pasted in. Two builds are on offer,
+        stock SeedSigner and the 3rdIteration smartcard fork, and the control
+        under the device says which is running and switches between them.</p>
+
+        <p>What a browser cannot provide is replaced at the four points where the
+        firmware reaches for hardware, and each is replaced from outside it:</p>
         <ul>
-          <li><strong>Display:</strong> the driver hands raw RGB frames to the page,
-          which paints them into the canvas above.</li>
-          <li><strong>Buttons:</strong> the worker blocks on the wallet's main loop and
-          can never answer a message, so keys cross on a SharedArrayBuffer and wake it
-          with Atomics.</li>
-          <li><strong>Camera:</strong> your webcam via getUserMedia. SeedSigner reads QR
-          codes with pyzbar, a C library with no WebAssembly build, so decoding is done
-          by the browser's BarcodeDetector or by jsQR and the bytes are handed to the
-          unmodified decoder.</li>
+          <li><strong>Display:</strong> the device's own driver renders the frames
+          and hands them to the page, which paints them at its native 320&times;240,
+          pixel for pixel.</li>
+          <li><strong>Buttons:</strong> the worker sits blocked inside the wallet's
+          main loop and can never answer a message, so keys cross on a
+          SharedArrayBuffer and wake it with Atomics.</li>
+          <li><strong>Camera:</strong> your webcam, through getUserMedia. SeedSigner
+          reads QR codes with pyzbar, a C library with no WebAssembly build, so the
+          decode happens in the browser and the bytes reach the unmodified decoder
+          exactly as pyzbar would have returned them.</li>
           <li id="about-smartcard"><strong>Smartcard:</strong> simulated SeedKeeper
-          and Satochip cards that answer real APDUs, because browsers have no
-          smartcard API at all. The smartcard fork only: stock SeedSigner has no
-          card code for them to answer.</li>
+          and Satochip cards answering real APDUs, because browsers have no
+          smartcard API at all. The fork only; stock has no card code to answer.</li>
         </ul>
-        <p>Nothing leaves your browser. The wallet has no network of any kind, and the
-        page's content security policy names exactly one other origin it may reach:
-        <code>signet.bitsaga.be</code>, the faucet and proof endpoints of Bitsaga Signet,
-        which nothing asks anything unless you start the multisig tutorial.</p>
-        <p><strong>It is a simulator.</strong> Treat every key it shows as public and
-        never type a seed phrase you rely on. Mainnet works here exactly as on
-        hardware, and that is the danger: on Mainnet this page exports the correct
-        mainnet account keys and produces real, valid mainnet signatures. It sits in
-        the device's own Settings and Advanced menus where it always has, neither
-        hidden nor recommended, and the multisig tutorial has no use for it: Bitsaga
-        Signet does the whole thing.</p>
-        <p>Source, and a build script that rebuilds this wallet from a pinned
-        upstream commit so you can check the claim above yourself:
-        <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">seedsigner-sim</a>.
-        <strong>Technical details</strong>, beside this, has the pin, both
-        published hashes and everything the wallet zip carries.
-        The device firmware lives in
-        <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">seedsigner-os</a>.</p>
+
+        <p><strong>Nothing leaves your browser.</strong> The wallet has no network
+        of any kind, and this page's content security policy names exactly one
+        other origin it may reach: <code>signet.bitsaga.be</code>, the faucet and
+        proof endpoints of Bitsaga Signet, which nothing asks anything unless you
+        start the multisig tutorial.</p>
+
+        <p><strong>It is still a simulator</strong>, running in a tab on an
+        ordinary computer, with no secure element and no air gap. Treat every key
+        it shows as public and never type a seed phrase you rely on. Mainnet works
+        here exactly as it does on hardware, and that is the danger rather than a
+        feature: on Mainnet this page derives the real mainnet account keys and
+        produces valid mainnet signatures. It sits in the device's own Settings
+        and Advanced menus where it always has, neither hidden nor recommended,
+        and the multisig tutorial has no use for it, because Bitsaga Signet does
+        the whole thing.</p>
+
+        <div id="build">
+          <h3>What is running</h3>
+          <p id="firmware-line"></p>
+          <dl>
+            <dt>Firmware</dt><dd id="build-firmware">…</dd>
+            <dt>Upstream</dt><dd><a id="build-repo" rel="noopener"></a></dd>
+            <dt>Tag</dt><dd><a id="build-tag" rel="noopener"></a></dd>
+            <dt>Commit</dt><dd><a id="build-commit" class="hash" rel="noopener"></a></dd>
+            <dt>Interpreter</dt><dd>Pyodide <span id="build-pyodide"></span>, CPython compiled to WebAssembly</dd>
+          </dl>
+          <p>Each firmware is pinned to the newest release its project has
+          published, by tag and by commit, rather than to a branch. A branch moves
+          and can be rewritten out from under a rebuild; a published tag cannot.</p>
+
+          <h3>The wallet zip this page loaded, <span id="build-zip"></span></h3>
+          <dl>
+            <dt>published sha256</dt><dd class="hash" id="build-published"></dd>
+            <dt>what arrived here</dt><dd class="hash" id="build-computed"></dd>
+            <dt>published contents</dt><dd class="hash" id="build-contents"></dd>
+          </dl>
+          <p class="verdict" id="build-verdict" data-state="pending"></p>
+          <p class="limit">The page is checking itself, so this is a convenience and
+          not proof: only rebuilding the zip and comparing the hash is a check that
+          does not depend on this page being honest.</p>
+
+          <h3>What is in it</h3>
+          <p>The upstream tree at the commit above, this repository's stand-ins for
+          the hardware a browser does not have, and these pinned dependencies.
+          Nothing else.</p>
+          <ul class="deps" id="build-deps"></ul>
+
+          <p class="links">Check it yourself:
+          <a href="https://github.com/bitsagarob/seedsigner-sim/blob/main/build/build-wallet-zip.sh" rel="noopener">rebuild the zip</a> ·
+          <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml" rel="noopener">the same rebuild on a clean runner</a> ·
+          <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/test.yml" rel="noopener">tests</a> ·
+          <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml" rel="noopener">upstream's own tests</a> ·
+          <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">source</a> ·
+          <a href="https://github.com/bitsagarob/seedsigner-sim/releases/latest" rel="noopener">latest release</a> ·
+          <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">device images</a></p>
+        </div>
       </div>
     </details>
-  <!-- Everything the page can say about what it is running, and the one check it
-       can make about itself. Closed until it is asked for, and down here rather
-       than above the device: it is about the thing rather than part of it.
-       Filled in from wallet-<firmware>.build-info.json, which the build writes
-       beside the zip from the pins it built from, except the received hash,
-       which comes from the worker. -->
-  <details id="build">
-    <summary>Technical details</summary>
-    <div>
-      <!-- What is running, in words. In here rather than out on the page: it is
-           the same material as the rows under it, said longhand. -->
-      <p id="firmware-line"></p>
-      <dl>
-        <dt>Firmware</dt><dd id="build-firmware">…</dd>
-        <dt>Upstream</dt><dd><a id="build-repo" rel="noopener"></a></dd>
-        <dt>Tag</dt><dd><a id="build-tag" rel="noopener"></a></dd>
-        <dt>Commit</dt><dd><a id="build-commit" class="hash" rel="noopener"></a></dd>
-        <dt>Interpreter</dt><dd>Pyodide <span id="build-pyodide"></span>, CPython compiled to WebAssembly</dd>
-      </dl>
-
-      <h3>The wallet zip this page loaded, <span id="build-zip"></span></h3>
-      <dl>
-        <dt>published sha256</dt><dd class="hash" id="build-published"></dd>
-        <dt>what arrived here</dt><dd class="hash" id="build-computed"></dd>
-        <dt>published contents</dt><dd class="hash" id="build-contents"></dd>
-      </dl>
-      <p class="verdict" id="build-verdict" data-state="pending"></p>
-      <p class="limit">The page is checking itself, so this is a convenience and
-      not proof: only rebuilding the zip and comparing the hash is a check that
-      does not depend on this page being honest.</p>
-
-      <h3>What is in it</h3>
-      <p>The upstream tree at the commit above, this
-      repository's stand-ins for the hardware a browser does not have, and these
-      pinned dependencies. Nothing else.</p>
-      <ul class="deps" id="build-deps"></ul>
-
-      <p class="links">Check it yourself:
-      <a href="https://github.com/bitsagarob/seedsigner-sim/blob/main/build/build-wallet-zip.sh" rel="noopener">rebuild the zip</a> ·
-      <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml" rel="noopener">the same rebuild on a clean runner</a> ·
-      <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/test.yml" rel="noopener">tests</a> ·
-      <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml" rel="noopener">upstream's own tests</a> ·
-      <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">source</a> ·
-      <a href="https://github.com/bitsagarob/seedsigner-sim/releases/latest" rel="noopener">latest release</a></p>
-    </div>
-  </details>
   </header>
   <!-- The short half is always up. A real seed typed while the device is on
        Testnet is the same seed, and its mainnet keys are compromised the moment
@@ -409,8 +401,8 @@
        sentence. What mainnet adds is the rest: this page then holds the correct
        mainnet keys, and there is no secure element under them. One line either
        way; the long form of both is behind the i at the top. -->
-  <p class="warn" id="warning"><strong>Simulator.</strong> Never enter a seed
-  phrase you rely on; use a throwaway test seed.<span class="mainnet-only"
+  <p class="warn" id="warning"><strong>Never enter a seed phrase you rely
+  on.</strong> Use a throwaway test seed.<span class="mainnet-only"
   id="warning-mainnet"> On Mainnet this page holds the real mainnet keys for
   whatever you give it, with no secure element under them: treat anything typed
   in as public.</span></p>
@@ -542,12 +534,10 @@ for (const panel of document.querySelectorAll("header > details")) {
     if (panel.open && event.key === "Escape") panel.open = false;
   });
   // Opening only. A panel closes for reasons the visitor did not choose --
-  // clicking anywhere else, Escape, opening the other one -- and counting those
-  // would say a panel was used twice as often as it was.
+  // clicking anywhere else, Escape -- and counting those would say it was used
+  // twice as often as it was.
   panel.addEventListener("toggle", () => {
-    if (panel.open) {
-      track.event("page", panel.id === "about" ? "about-open" : "technical-details-open");
-    }
+    if (panel.open) track.event("page", "about-open");
   });
 }
 
