@@ -31,10 +31,10 @@
      to the same column and centred in it, and the device alone keeps the wider
      bound below. 46rem because that is what the details panel and the tutorial
      panel are already, so the column has one edge rather than three. */
-  h1, #status, .hint, .warn, .note, .running-row {
+  h1, .hint, .warn, .note, .running-row {
     max-width: min(46rem, 100%);
   }
-  h1, #status, .hint { text-align: center; }
+  h1, .hint { text-align: center; }
   #device { width: 100%; }
   /* The stage: the device, and the tutorial that drives it, and nothing else.
      Everything the page says about itself is below them in the footer, because
@@ -149,8 +149,12 @@
      the flow costs nothing either way: it says "loading python" over the band
      and the device has not moved because it was never below anything. */
   #status {
-    position: absolute; top: 0; left: 0; z-index: 4; margin: 0;
-    max-width: 60%; text-align: left;
+    position: absolute; top: 0; left: 0; right: 0; z-index: 4; margin: 0;
+    /* Centred over the device, the way it was when it had a line of its own.
+       Room left at the right for the network label, which shares this band and
+       is anchored to that end of it. Inert, so a word about loading can never
+       take a press meant for the shell underneath it. */
+    padding: 0 6rem; text-align: center; pointer-events: none;
     font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
     color: #656c76;
   }
