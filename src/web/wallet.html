@@ -342,6 +342,22 @@
         proof endpoints of Bitsaga Signet, which nothing asks anything unless you
         start the multisig tutorial.</p>
 
+        <p><strong>That one origin is ours.</strong> Bitsaga Signet is a Bitcoin
+        test network we run, and it exists so the multisig tutorial can finish:</p>
+        <ul>
+          <li><strong>What it is:</strong> a signet with Testnet address prefixes,
+          a faucet, and a block every thirty seconds, so a wallet can be funded and
+          a spend can be watched into a block in about a minute rather than
+          whenever a public test network gets round to it. Its coins exist only
+          there, cannot be sold or sent to anyone, and are worth nothing.</li>
+          <li><strong>What this page asks it:</strong> only the two things a browser
+          cannot do for itself, which are seeing the chain and reaching the network.
+          The wallet is built, the addresses derived, the PSBT assembled and the
+          transaction finalised here in the tab; Signet is asked for the faucet
+          payment, for whether a transaction has made it into a block, and to relay
+          the finished one. The wallet itself never talks to it at all.</li>
+        </ul>
+
         <p><strong>It is still a simulator</strong>, running in a tab on an
         ordinary computer, with no secure element and no air gap. Treat every key
         it shows as public and never type a seed phrase you rely on. Mainnet works
