@@ -516,18 +516,32 @@ BaseScreen.display = _traced_display
 BaseScreen._run = _traced_run
 
 # Views can stall before they ever construct a Screen, so trace one level up.
-from seedsigner.views.view import View
-_orig_view_run = View.run
-def _traced_view_run(self, *a, **kw):
-    js_log(f"View.run enter: {type(self).__name__}")
+#
+# Destination.run, and not View.run, which is what this patched for a long time
+# and traced nothing at all. View.run is abstract -- its body raises "Must
+# implement in the child class" -- and all of upstream's views override it, so
+# patching the base class rebound an attribute no call ever looked up and a
+# whole boot produced zero lines. Destination.run is the funnel the controller
+# drives every transition through, and it wraps instantiation as well as the
+# run, so a view that hangs in __init__ before it has a Screen still names
+# itself here, which was the point of tracing one level up.
+#
+# The name comes from the Destination rather than from the instance because the
+# instance does not exist yet when the enter line is written -- and that is
+# exactly the failure this is here to locate.
+from seedsigner.views.view import Destination
+_orig_dest_run = Destination.run
+def _traced_dest_run(self):
+    name = self.View_cls.__name__ if self.View_cls is not None else "None"
+    js_log(f"View.run enter: {name}")
     try:
-        out = _orig_view_run(self, *a, **kw)
-        js_log(f"View.run exit: {type(self).__name__}")
+        out = _orig_dest_run(self)
+        js_log(f"View.run exit: {name}")
         return out
     except BaseException as exc:
-        js_log(f"View.run RAISED {type(self).__name__}: {type(exc).__name__}: {exc}")
+        js_log(f"View.run RAISED {name}: {type(exc).__name__}: {exc}")
         raise
-View.run = _traced_view_run
+Destination.run = _traced_dest_run
 
 # The controller consults these right after the splash. Only the fork has the
 # helper: stock has no seedsigner.helpers.seedsigner_os at all, so this is
@@ -548,6 +562,51 @@ if _ss_os is not None:
 
     import seedsigner.controller as _ctrl
     _ctrl.is_seedsigner_os_dev_build = _traced_devbuild
+
+# --- one upstream bug, put back from outside ---------------------------------
+# ShieldSigner B11 -- the tag UPSTREAM pins, and the tag the official
+# pi0-smartcard image is built from -- calls _format_word_password() in
+# password_generator_views.py without importing it. The name is defined in
+# tools_views.py and never brought across, so every word-based password ends in
+# a System Error naming line 893 instead of a password. It is nothing to do with
+# the dice it was first reported from: EFF short, EFF long and BIP39 all reach
+# the same line, whatever the entropy came from. Real B11 hardware has it too.
+#
+# From outside, and only where the name is missing. The wallet zip stays the
+# pinned tree byte for byte -- that is the claim this repository exists to let
+# anyone check -- so this is replaced the way every other seam here is, from
+# this side of the boundary rather than by editing the tree. Upstream's own
+# master fixes it with exactly this import, so the guard turns this into a
+# no-op the day UPSTREAM can move to a tag that carries the fix. There is no
+# such tag yet: B11 is the newest one published.
+#
+# tools_views first, and that order is load bearing. The two modules import each
+# other: password_generator_views pulls its shared helpers from tools_views at
+# the top, and tools_views pulls the password views back in with a star import
+# on its last line, which works only because tools_views is the one that gets
+# imported first and so is fully defined by the time the star runs. Importing
+# password_generator_views first inverts that -- tools_views ends up starring in
+# a module that is still executing its own import block -- and the Tools menu
+# then dies on "name 'ToolsPasswordGeneratorTypeView' is not defined" before it
+# can reach the bug below. Doing it in the order the wallet itself does costs
+# nothing and stays out of that.
+#
+# Broad except on purpose. These are imported lazily by the menu that needs
+# them, so a module that fails to import here would take the whole wallet down
+# with it, where today it only spoils the one menu.
+try:
+    from seedsigner.views import tools_views  # imported first, for the order above
+    from seedsigner.views import password_generator_views as _pgv
+except ImportError:
+    _pgv = None   # stock has no password generator at all
+except Exception as exc:
+    _pgv = None
+    js_log(f"password_generator_views did not import: {type(exc).__name__}: {exc}")
+
+if _pgv is not None and not hasattr(_pgv, "_format_word_password"):
+    from seedsigner.views.tools_views import _format_word_password as _fwp
+    _pgv._format_word_password = _fwp
+    js_log("patched in password_generator_views._format_word_password")
 
 # --- which Bitcoin network the wallet is set to ------------------------------
 # The page has to show this, and the page must not be the one that knows it: a

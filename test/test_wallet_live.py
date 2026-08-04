@@ -54,14 +54,15 @@ signed is correct and the change really does come back, which is why everything
 downstream of it passes; what the visitor was shown was not. One byte in
 src/web/signet-coordinator.js, deliberately not fixed here.
 
-A second finding, and it is why --new-seed steers by button numbers rather than
-by names. src/web/wallet-worker.js wraps View.run to narrate "View.run enter:
-<ViewName>", with the comment that a view can stall before it ever builds a
-screen and so is worth tracing one level up. It never fires. Every View in
-SeedSigner overrides run(), so patching the base class's run() rebinds an
-attribute nothing ever looks up, and a whole boot and every menu in this file
-produce exactly zero of those lines. The tracing costs nothing and proves
-nothing. Deliberately not fixed here: one line in src/web/wallet-worker.js.
+A second finding, since fixed, and it is why --new-seed steers by button numbers
+rather than by names. src/web/wallet-worker.js narrates "View.run enter:
+<ViewName>" so that a view which stalls before it ever builds a screen still
+names itself. It used to patch View.run, which never fired: every View in
+SeedSigner overrides run(), so the base class's run() is an attribute nothing
+ever looks up, and a whole boot produced exactly zero of those lines. It now
+wraps Destination.run, the one funnel the controller drives every transition
+through, and the lines are real. This file still steers by button numbers,
+because that is what it was written against and the numbers are no less true.
 
 --new-seed and the faucet. A seed nobody has ever used holds nothing, so this
 mode cannot be run against coins an earlier run left behind and cannot be
@@ -336,8 +337,9 @@ def chose(log, screen, index, timeout, since=0):
 
     It is the exit line rather than the entry line for the next screen because
     it is the only narration that carries a number. The device also traces
-    "View.run enter: <ViewName>", which would name the destination outright and
-    would be the better oracle, but it never appears: see this file's header.
+    "View.run enter: <ViewName>", which names the destination outright and is
+    the better oracle for anything written from here on; this file predates it
+    working at all. See this file's header.
     """
     return log.wait(rf"display\(\) exit: {screen} -> {index}\b", timeout,
                     f"{screen} -> {index}", since=since)

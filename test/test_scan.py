@@ -9,8 +9,9 @@ The wallet already logs every screen it displays, so that log is the oracle:
 reaching SeedFinalizeScreen means the QR was decoded, parsed as a SeedQR and
 turned into a seed. The screenshot is taken there.
 
-Screens rather than views, because most views override run() and so never reach
-the traced View.run.
+Screens rather than views, which is what this was written against. The view
+trace is real now that it wraps Destination.run, but a scan is a screen-shaped
+thing: what is being asserted is that the device drew SeedFinalizeScreen.
 """
 
 import os

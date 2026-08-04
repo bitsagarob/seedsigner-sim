@@ -165,6 +165,14 @@
      same grey as the status line above it and goes away with the game. */
   #doom-hint { margin: 0; }
   #doom-hint:empty { display: none; }
+  /* The one thing on this page the device cannot say for itself, so it is said
+     in the device's own error colour rather than in the grey of a hint. Empty
+     for the whole of a normal visit, and taking no room while it is. */
+  #camera-hint {
+    margin: .5rem auto 0; max-width: 44ch; color: #ef4444;
+    font-size: .85em; text-align: center;
+  }
+  #camera-hint:empty { display: none; }
   header {
     display: flex; flex-wrap: wrap; align-items: center;
     justify-content: center; gap: .5rem;
@@ -284,7 +292,7 @@
   #network-line:has(#network:empty) { display: none; }
   /* Mainnet is where a visitor has to have gone deliberately, through the
      device's own menu, so the page stops behaving like a tutorial when they
-     do: the invitation to our test network goes away and the warning gets
+     do: the invitation to the test network goes away and the warning gets
      louder. Nothing here invites anyone towards mainnet. */
   body.mainnet #network {
     color: #e8c07a; border: 1px solid #4a3d22; background: #211b10;
@@ -424,8 +432,8 @@
         chain endpoints of Bitsaga Signet, which nothing asks anything until you
         open the simulator wallet or start the multisig tutorial.</p>
 
-        <p><strong>That one origin is ours.</strong> Bitsaga Signet is a Bitcoin
-        test network we run, and it exists so that the simulator wallet and the
+        <p><strong>That one origin is mine.</strong> Bitsaga Signet is a Bitcoin
+        test network I run, and it exists so that the simulator wallet and the
         multisig tutorial can finish:</p>
         <ul>
           <li><strong>What it is:</strong> a signet with Testnet address prefixes,
@@ -526,8 +534,8 @@
         <details class="note" id="network-note">
           <summary aria-label="About this network" title="About this network">i</summary>
           <div>This is a simulator, and it starts on Testnet, so you can use it
-          with <a href="/signet">Bitsaga Signet</a>, our own test network. These
-          are not real bitcoin. They exist only on our test network, cannot be
+          with <a href="/signet">Bitsaga Signet</a>, my own test network. These
+          are not real bitcoin. They exist only on that test network, cannot be
           sold or sent to anyone, and are worth nothing.</div>
         </details>
         <p id="network"></p>
@@ -536,6 +544,10 @@
            why the wallet is not up. Filled in by the boot below and emptied
            again the moment the wallet has the device. -->
       <p class="hint" id="doom-hint"></p>
+      <!-- Why the device has stopped answering, when the reason is that its
+           camera has gone quiet. Filled in by the camera channel and emptied
+           again the moment frames come back. -->
+      <p id="camera-hint"></p>
       <!-- Only offered where it is any use: on a phone, where the page around the
            device is what is making the device small. -->
       <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
@@ -666,6 +678,7 @@ const deviceEl = document.getElementById("device");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const doomHint = document.getElementById("doom-hint");
+const cameraHint = document.getElementById("camera-hint");
 const networkEl = document.getElementById("network");
 
 // The two header panels are popovers: they cover the page rather than pushing
@@ -1023,20 +1036,33 @@ const CARD_UNLOCKED = /^\[card\] .*(seeded with|stored secret|exporting secret)/
 
 // Where a visitor got to, out of the wallet's own account of itself.
 //
-// Screens rather than views, because the views are not really narrated: the
-// worker traces View.run, and all 310 of upstream's views define their own run,
-// so the base class it patched is almost never the one that gets called. The
-// screen names are what the tests and the tutorial have always read, and they
-// are coarse -- most menus are a ButtonListScreen -- but they are the truth
-// about what was on the device, and the shape of a visit is legible in them.
+// Views are what a step in the funnel is, now that the worker's tracing of them
+// actually fires. Screens were what it used to be, and they cannot answer the
+// question: nearly every menu on the device is a ButtonListScreen and nothing
+// else, so a flow built on screens reported that somebody saw eight button
+// lists. The same walk in view names is MainMenuView, ToolsMenuView,
+// ToolsPasswordGeneratorTypeView -- the same steps with the answer left in.
+//
+// Still under /simulator/screen/, deliberately: it is the same question about
+// the same visits, and a new prefix would split the flow reports in two at the
+// day this changed rather than sharpening the one that already exists.
+//
+// Milestones stay on the screens. They are about what was actually drawn -- a
+// QR that appeared, a seed that finished loading -- and the display line is the
+// one that says so.
 function narrate(message) {
+  const view = /^View\.run enter: (\w+)/.exec(message);
+  if (view) {
+    track.screen(view[1]);
+    return;
+  }
+
   const entered = /^display\(\) enter: (\w+)/.exec(message);
   if (!entered) {
     if (CARD_UNLOCKED.test(message)) track.milestone("card-unlocked");
     return;
   }
   const screen = entered[1];
-  track.screen(screen);
   if (MILESTONES[screen]) track.milestone(MILESTONES[screen]);
   if (ARMED_BY[screen]) {
     armed = ARMED_BY[screen];
@@ -1113,7 +1139,13 @@ function startWallet() {
   // for permission before the user actually chooses to scan. When the tutorial
   // or the wallet is holding a code up it is handed that code's own canvas
   // instead of a webcam, so the permission prompt never happens at all.
-  CameraChannel.runPage(cameraBuffer, { source: cameraSource });
+  // onTrouble is how the page says the thing the device cannot: no frames means
+  // the firmware never reaches its own button check, so a scan screen that has
+  // gone quiet is also one that cannot be left.
+  CameraChannel.runPage(cameraBuffer, {
+    source: cameraSource,
+    onTrouble: (message) => { cameraHint.textContent = message; },
+  });
   const tray = cardBuffer ? CardTray.runPage(cardBuffer, "cardtray") : null;
 
   const slot = document.getElementById("tutorial-slot");

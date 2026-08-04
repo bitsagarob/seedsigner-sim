@@ -43,6 +43,12 @@
   // bottleneck and frames it publishes in between are simply overwritten.
   var TICK_MS = 66;
 
+  // How long the camera may deliver nothing before the page says so, and how
+  // often it is asked. Comfortably longer than a tick and than any single
+  // decode, so an ordinarily slow frame never trips it.
+  var STALL_MS = 4000;
+  var WATCH_MS = 1000;
+
   function header(sab) {
     return new Int32Array(sab, 0, HEADER_BYTES / 4);
   }
@@ -65,14 +71,22 @@
   // The tutorial passes the phone mock's own canvas: the device's camera is
   // pointed at the phone's screen, which is a picture on this page, so nothing
   // below this line changes and no webcam permission is ever asked for.
+  //
+  // options.onTrouble, if given, is called with a sentence whenever the camera
+  // is delivering nothing, and with "" once it delivers again. It is a callback
+  // rather than anything drawn from here because this file is loaded by the
+  // worker as well, where there is no document to draw into.
   function runPage(sab, options) {
     var hdr = header(sab);
     var source = (options && options.source) || null;
+    var onTrouble = (options && options.onTrouble) || function () {};
     var stream = null;
     var video = null;
     var capture = null;
     var preview = null;
     var decoder = null;
+    var lastFrameAt = 0;
+    var trouble = "";
 
     function setState(state) {
       Atomics.store(hdr, STATE, state);
@@ -94,6 +108,39 @@
         video = null;
       }
       setState(state === undefined ? STATES.IDLE : state);
+    }
+
+    // A camera that starts and then goes quiet is the one failure the device
+    // cannot report for itself. ScanScreen's loop polls its buttons inside
+    // `if frame is not None`, so a scan screen that gets no frames is also a
+    // scan screen nobody can leave: every press is ignored and the device looks
+    // like it has hung. Failing to *start* is already covered, since that
+    // raises CameraConnectionError in the shim and the device draws its own
+    // error screen; what is left is this, which nothing else notices.
+    //
+    // On its own timer rather than inside tick(), so that it still fires when
+    // the loop itself is what stopped.
+    function report(message) {
+      if (message === trouble) return;
+      trouble = message;
+      onTrouble(message);
+    }
+
+    function watch() {
+      if (Atomics.load(hdr, CMD) === 0) return report("");
+
+      var state = Atomics.load(hdr, STATE);
+      // The worker only reads the error string while it is parked inside
+      // start(). One that fails after that has nobody else to tell.
+      if (state === STATES.FAILED) {
+        return report(readString(sab, hdr, ERR_OFFSET, ERR_LEN) || "the camera stopped");
+      }
+      if (state !== STATES.RUNNING) return;
+      if (Date.now() - lastFrameAt < STALL_MS) return;
+
+      report("The camera is not sending any pictures. The device only checks its " +
+             "buttons after it reads one, so it will not answer a press until they " +
+             "start again: close whatever else is using the camera, or reload.");
     }
 
     function makeCanvas(width, height) {
@@ -192,6 +239,9 @@
 
     function start() {
       setState(STATES.STARTING);
+      // Cleared so that watch() above reports this attempt rather than the
+      // reason the last one failed.
+      Atomics.store(hdr, ERR_LEN, 0);
       return open().then(function (opened) {
         stream = opened;
         video = document.createElement("video");
@@ -219,6 +269,10 @@
           console.log("[cam] " + video.videoWidth + "x" + video.videoHeight +
                       " decoding with " + decoder.name);
         }
+        // The stall clock starts here rather than when the camera was asked
+        // for: getUserMedia can sit on a permission prompt for as long as
+        // somebody takes to read it, and that is not a stall.
+        lastFrameAt = Date.now();
         setState(STATES.RUNNING);
       }).catch(fail);
     }
@@ -240,6 +294,8 @@
       // decode never looks at these bytes.
       Atomics.add(hdr, FRAME_SEQ, 1);
       Atomics.notify(hdr, FRAME_SEQ);
+      lastFrameAt = Date.now();
+      report("");
     }
 
     function publishPayload(payload) {
@@ -278,6 +334,7 @@
     }
 
     loop();
+    setInterval(watch, WATCH_MS);
     return { decoderName: function () { return decoder && decoder.name; } };
   }
 
