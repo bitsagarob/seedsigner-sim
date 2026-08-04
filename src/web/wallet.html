@@ -598,19 +598,24 @@ const TUTORIAL = TUTORIAL_OFFERED && TUTORIAL_ASKED !== "offer";
 // device-plus-companion split rather than two copies of one.
 document.body.classList.toggle("paired", TUTORIAL);
 
-// Straight to the wallet, past the game.
+// The game, when it is asked for.
 //
-// The device boots into DOOM and the wallet is behind the unlock, which is the
-// device's own behaviour and the reason the page is interactive in a second
-// instead of forty. But a deep link to a wallet has to land on a wallet: the
-// test suite drives the firmware directly, the tutorial drives it for a
-// visitor, and anyone handed "here, look at this screen" should get that
-// screen. ?wallet is that link, and asking about the tutorial at all is the
-// same request by another name -- nobody arrives at ?tutorial for a game.
+// The device itself boots into DOOM and hides the wallet behind the unlock,
+// which is the whole joke on hardware and is wrong here. This page is called a
+// wallet simulator, it is linked as "open the simulator", and it is measured on
+// whether people reach the wallet. Booting a game by default puts a puzzle in
+// front of the thing everybody came for, and the ones who do not solve it leave
+// thinking that was the product.
+//
+// So DOOM is a door you can open rather than one you have to get through, and
+// the firmware row is where it is opened. ?wallet and ?tutorial stay working and
+// now mean nothing extra, since the wallet is what happens anyway; they are kept
+// because deep links carrying them are already out there and in the suite.
 //
 // Presence is the request, as with ?debug: there is nothing to spell wrong.
+const DOOM_ASKED = new URLSearchParams(location.search).has("doom");
 const WALLET_ASKED = new URLSearchParams(location.search).has("wallet");
-const SKIP_DOOM = WALLET_ASKED || TUTORIAL_ASKED !== null;
+const SKIP_DOOM = !DOOM_ASKED || WALLET_ASKED || TUTORIAL_ASKED !== null;
 
 // How the page names each firmware, on the switch and in the sentence inside
 // the details panel. The switch carries the name each build calls itself --
@@ -718,8 +723,8 @@ for (const choice of CHOICES) {
     params.set("firmware", choice.firmware);
     // wallet=1 is what skips the game, so choosing DoomSigner is choosing not
     // to skip it. Deleted rather than set to nothing, so the URL stays clean.
-    if (choice.doom) params.delete("wallet");
-    else params.set("wallet", "1");
+    if (choice.doom) { params.set("doom", "1"); params.delete("wallet"); }
+    else { params.delete("doom"); params.set("wallet", "1"); }
     location.search = params.toString();  // sets it and reloads
   });
   switchEl.appendChild(button);
