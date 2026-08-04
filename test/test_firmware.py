@@ -70,8 +70,15 @@ def main() -> int:
         check("and the open page does not carry that sentence as well",
               page.locator("#build #firmware-line").count() == 1,
               str(page.locator("#firmware-line").count()))
-        check("the switch offers both firmwares by name, with the fork pressed",
-              switch_state(page) == [("ShieldSigner", "true"),
+        # Three, and one of them is not a firmware in the sense the other two
+        # are: DoomSigner runs this same smartcard wallet with the boot game in
+        # front of it. It is in this row because what a visitor picks between is
+        # three things they could put on a device, not three Python packages.
+        # These URLs all carry wallet=1, so the game is skipped and the row
+        # settles on the wallet that is actually running.
+        check("the switch offers all three by name, with the fork pressed",
+              switch_state(page) == [("DoomSigner", "false"),
+                                     ("ShieldSigner", "true"),
                                      ("SeedSigner", "false")],
               str(switch_state(page)))
         page.wait_for_selector(".cardtray-card")
@@ -82,7 +89,7 @@ def main() -> int:
               page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"))
         page.screenshot(path=harness.artifact("firmware-smartcard.png"), full_page=True)
 
-        page.locator("#firmware-switch button[data-firmware=stock]").click()
+        page.locator("#firmware-switch button[data-choice=stock]").click()
         page.wait_for_url(re.compile(r"firmware=stock"))
         page.wait_for_selector("#firmware-switch button")
 
@@ -95,7 +102,8 @@ def main() -> int:
         check("the panel says it is running stock, and calls it stock",
               STOCK in firmware_line(page), firmware_line(page))
         check("the switch follows",
-              switch_state(page) == [("ShieldSigner", "false"),
+              switch_state(page) == [("DoomSigner", "false"),
+                                     ("ShieldSigner", "false"),
                                      ("SeedSigner", "true")],
               str(switch_state(page)))
         # Absent, not disabled and not greyed. Stock has no card support at all,
@@ -107,7 +115,7 @@ def main() -> int:
               not page.locator("#cardtray").is_visible())
         page.screenshot(path=harness.artifact("firmware-stock.png"), full_page=True)
 
-        page.locator("#firmware-switch button[data-firmware=smartcard]").click()
+        page.locator("#firmware-switch button[data-choice=smartcard]").click()
         page.wait_for_url(re.compile(r"firmware=smartcard"))
         page.wait_for_selector(".cardtray-card")
         check("switching back comes back on the fork, tray and all",

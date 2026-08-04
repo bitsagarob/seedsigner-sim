@@ -211,7 +211,13 @@
   /* The firmware control, in the card tray's idiom: a plain two-way switch and
      nothing shaped like a card or a slot, because this page says microSD is not
      emulated and a slot to push something into would promise otherwise. */
-  #firmware-switch { display: flex; align-items: center; gap: .35rem; }
+  /* Wraps, because there are three of these now and a 360 pixel phone cannot
+     hold the label and all three on one line. Centred so a wrapped row does not
+     hang off to one side. */
+  #firmware-switch {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    align-items: center; gap: .35rem;
+  }
   #firmware-switch .label { color: #7c848f; }
   #firmware-switch button {
     font: inherit; color: #8b939e; background: #1d2026; border: 1px solid #2a2e35;
@@ -463,7 +469,8 @@
           <a href="https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml" rel="noopener">upstream's own tests</a> ·
           <a href="https://github.com/bitsagarob/seedsigner-sim" rel="noopener">source</a> ·
           <a href="https://github.com/bitsagarob/seedsigner-sim/releases/latest" rel="noopener">latest release</a> ·
-          <a href="https://github.com/bitsagarob/seedsigner-os" rel="noopener">device images</a></p>
+          <a href="https://github.com/bitsagarob/doomsigner" rel="noopener">device images</a> ·
+          <a href="https://github.com/bitsagarob/doomsigner" rel="noopener">DoomSigner</a></p>
         </div>
       </div>
     </details>
@@ -666,22 +673,63 @@ if (FIRMWARE !== "smartcard") document.getElementById("about-smartcard").remove(
 // worker is inside Python for the life of the page, so there is no unpacking a
 // different wallet underneath it, and the URL is the only thing that carries
 // the choice anyway.
+// Three to choose from, and one of them is not a firmware in the sense the other
+// two are. DoomSigner runs the same smartcard wallet ShieldSigner does; what it
+// changes is what boots first, because the game lives in the OS rather than in
+// the wallet. Putting it in this row anyway is a decision about what a visitor
+// is actually choosing between, which is three things you could flash to a
+// device, not three Python packages. What the row must not do is go on claiming
+// DOOM is running after the unlock has handed the device over: press 1, 2, 3 and
+// the row moves to ShieldSigner, because that is then the truth.
+const CHOICES = [
+  { id: "doom", label: "DoomSigner", firmware: "smartcard", doom: true },
+  { id: "smartcard", label: "ShieldSigner", firmware: "smartcard", doom: false },
+  { id: "stock", label: "SeedSigner", firmware: "stock", doom: false },
+];
+
+// What is running right now, rather than what the URL asked for. The URL cannot
+// answer this on its own: it says what the page was asked to boot, and after the
+// unlock that is no longer what is on the device.
+let walletHasTheDevice = false;
+
+function chosenNow() {
+  if (!walletHasTheDevice && !SKIP_DOOM && window.DoomBoot
+      && FIRMWARE === "smartcard") return "doom";
+  return FIRMWARE;
+}
+
 const switchEl = document.getElementById("firmware-switch");
-for (const name of FIRMWARES) {
+function paintSwitch() {
+  const now = chosenNow();
+  for (const button of switchEl.querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.choice === now));
+  }
+}
+for (const choice of CHOICES) {
   const button = document.createElement("button");
   button.type = "button";
-  button.dataset.firmware = name;
-  button.textContent = FIRMWARE_INFO[name].button;
-  button.setAttribute("aria-pressed", String(name === FIRMWARE));
+  button.dataset.choice = choice.id;
+  button.dataset.firmware = choice.firmware;
+  button.textContent = choice.label;
   button.addEventListener("click", () => {
-    if (name === FIRMWARE) return;
-    track.event("page", "firmware-switch", name);
+    if (choice.id === chosenNow()) return;
+    track.event("page", "firmware-switch", choice.id);
     const params = new URLSearchParams(location.search);
-    params.set("firmware", name);
+    params.set("firmware", choice.firmware);
+    // wallet=1 is what skips the game, so choosing DoomSigner is choosing not
+    // to skip it. Deleted rather than set to nothing, so the URL stays clean.
+    if (choice.doom) params.delete("wallet");
+    else params.set("wallet", "1");
     location.search = params.toString();  // sets it and reloads
   });
   switchEl.appendChild(button);
 }
+paintSwitch();
+// The unlock is the moment DoomSigner stops being what is running.
+addEventListener("seedsigner:wallet-starting", () => {
+  walletHasTheDevice = true;
+  paintSwitch();
+});
 
 // The details panel. Everything in it that describes the build is read out of
 // wallet-<firmware>.build-info.json, which build/build-wallet-zip.sh writes
@@ -981,6 +1029,9 @@ function narrate(message) {
 // booting CPython in WebAssembly that used to be the first thing this page did
 // to everybody, including the people who never pressed a key.
 function startWallet() {
+  // Said out loud, because more than one thing on the page cares that the game
+  // is over: the firmware row stops claiming DoomSigner is what is running.
+  dispatchEvent(new Event("seedsigner:wallet-starting"));
   const worker = new Worker("wallet-worker.js");
 
   worker.onmessage = (event) => {
