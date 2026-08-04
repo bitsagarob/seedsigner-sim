@@ -354,6 +354,15 @@ def go_home(page, log, tries=8):
     for _ in range(tries):
         if log.last_screen() == "MainMenuScreen":
             return True
+        # The address verification screens are the one place left-then-select
+        # does not climb: the device is sitting on the result of checking an
+        # address the panel held up for it, and that is dismissed rather than
+        # navigated out of. It only appears now because the panel answers Verify
+        # Address by itself, which is the whole point of it.
+        if "AddressVerification" in (log.last_screen() or ""):
+            press(page, "Enter")
+            page.wait_for_timeout(500)
+            continue
         press(page, "ArrowLeft")
         if log.last_screen() == "MainMenuScreen":
             return True
@@ -989,6 +998,18 @@ def main(argv) -> int:
                   "the panel to read the account key and connect")
             check("the panel connects off the device's screen with nothing pressed on it",
                   True, panel(page, ".wal-balance"))
+
+            # Exporting an xpub leaves the device on Verify Address, asking to be
+            # shown a receive address from the wallet that just imported the key.
+            # That is the check that the key the panel took is the key the device
+            # holds, so the panel answers it without being asked: the address is
+            # on screen and its QR is already up at the device's camera.
+            shown = panel(page, ".wal-verify") or ""
+            first = page.locator("#wallet .wal-verify .wal-mono").inner_text().strip() \
+                if page.locator("#wallet .wal-verify").count() else ""
+            check("and offers its first address for the device to check",
+                  "Your first address" in shown and first.startswith("tb1"),
+                  first or shown[:60] or "no verify block")
             shot(page, "04-connected")
 
             # The one place a generated seed can be checked against arithmetic

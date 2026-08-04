@@ -124,9 +124,27 @@
     ".wal .primary{color:#f7931a;border-color:#f7931a;background:#16181c;",
     "padding:.5rem 1.1rem;font-size:.95rem}",
     ".wal .primary:hover:not(:disabled){background:#1c2026;color:#f7931a}",
-    ".wal-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.1rem 0 0}",
+    ".wal-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:1.1rem 0 0}",
+    // The i, and what it holds. Out of the flow so opening it does not shove
+    // the buttons under it around.
+    ".wal-info{position:relative;font-size:.82rem}",
+    ".wal-info>summary{list-style:none;cursor:pointer;width:1.35rem;height:1.35rem;",
+    "border-radius:50%;border:1px solid #3a4048;color:#9aa3ae;display:grid;",
+    "place-items:center;font:italic 600 .85rem/1 serif}",
+    ".wal-info>summary::-webkit-details-marker{display:none}",
+    ".wal-info>summary:hover{color:#f7931a;border-color:#f7931a}",
+    ".wal-info[open]>summary{color:#f7931a;border-color:#f7931a}",
+    ".wal-info>div{position:absolute;z-index:12;left:0;top:1.8rem;width:min(24rem,70vw);",
+    "background:#0d1014;border:1px solid #2a2f36;border-radius:8px;padding:.6rem .75rem;",
+    "color:#b6bec8;line-height:1.55;box-shadow:0 .8rem 1.6rem rgba(0,0,0,.55)}",
 
     // The balance. The one number worth a size of its own.
+    // The address check the device asks for right after an export.
+    ".wal-verify{margin:1.2rem 0 0;padding:.8rem .9rem;border:1px solid #f7931a;",
+    "border-radius:8px;background:#16181c}",
+    ".wal-verify-head{margin:0;font-weight:600;color:#f7931a}",
+    ".wal-verify-say{margin:.45rem 0 0;font-size:.85rem;color:#9aa3ae}",
+    ".wal-verify .wal-actions{margin:.7rem 0 0}",
     ".wal-balance{margin:1.4rem 0 0;font-size:2rem;line-height:1.15;font-weight:600;",
     "color:#d7dbe0;letter-spacing:-.01em}",
     ".wal-balance span{font-size:1rem;font-weight:400;color:#7c848f;margin-left:.35rem}",
@@ -487,6 +505,21 @@
    * the flow moves on simply stops rather than writing into a state it no
    * longer belongs to.
    */
+  /**
+   * A small i holding one paragraph, for the things worth having available and
+   * not worth reading twice. Same circle as the header's and the network
+   * label's, so a visitor learns it once.
+   */
+  Wallet.prototype.info = function (text) {
+    var box = element("details", "wal-info");
+    var mark = element("summary", null, "i");
+    mark.setAttribute("aria-label", "More about this");
+    mark.title = "More about this";
+    box.appendChild(mark);
+    box.appendChild(element("div", null, text));
+    return box;
+  };
+
   Wallet.prototype.watch = function (test, timeout, what) {
     var self = this;
     var mine = ++this.reader;
@@ -521,6 +554,29 @@
    * to have, which the fountain decoder knows the moment the first part lands.
    * Nothing here is a guess or a timer pretending to be one.
    */
+  /**
+   * Give a code to a collector, and shrug at the ones that arrive broken.
+   *
+   * jsQR is reading a canvas the device is repainting, so now and then it
+   * returns a frame caught mid-redraw: half a code, a byteword that is not one,
+   * a checksum over bytes that were never all on screen at once. The decoder is
+   * right to refuse those. What was wrong was where the refusal went: watch()
+   * turns any throw into a rejection and the account watcher swallows it, so one
+   * bad frame stopped the panel looking for good ones, silently and for ever.
+   *
+   * A static export survived that because it is one clean read. An animated one
+   * is dozens, so it only had to be unlucky once, which is exactly how it
+   * looked: static connects, animated never does.
+   */
+  function feed(collector, text) {
+    try {
+      collector.receive(text);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   Wallet.prototype.readPsbt = function (timeout) {
     var self = this;
     var collector = null;
@@ -528,7 +584,7 @@
       var text = self.readDevice();
       if (!text || text.toLowerCase().indexOf("ur:crypto-psbt/") !== 0) return false;
       collector = collector || scope.URDecode.collector();
-      collector.receive(text);
+      if (!feed(collector, text)) return false;
       if (collector.parts()) {
         self.say("Code " + collector.have() + " of " + collector.parts() + ".");
       }
@@ -565,6 +621,42 @@
    * tutorial's does, so the capture stream always has something new to publish
    * and the device never sits looking at a frame it has already given up on.
    */
+  /**
+   * Hold the first receive address up, because the device has just asked for it.
+   *
+   * Exporting an xpub leaves a SeedSigner on Verify Address, telling you to show
+   * it a receive address from the wallet you just exported. That is not a
+   * formality: it is the check that the key this panel imported is the key the
+   * device holds, and skipping it teaches the habit of trusting whatever a
+   * coordinator claims your addresses are. So the panel puts the answer up
+   * ready, and says as little as it can while doing it.
+   *
+   * Ready, not beamed. An earlier turn of this held the code at the camera the
+   * moment it connected, which took the camera nobody had offered it and pushed
+   * the device into its address check unasked. Showing it is one press.
+   */
+  Wallet.prototype.offerVerify = function () {
+    var self = this;
+    // Branch 0, index 0: the first receive address, which is the one a device
+    // checking an import expects to be shown.
+    var first = null;
+    (this.records || []).forEach(function (record) {
+      if (!first && record.branch === 0 && record.index === 0) first = record;
+    });
+    if (!first) return;
+    this.verify = first;
+    this.render();
+
+  };
+
+  Wallet.prototype.doneVerifying = function () {
+    if (!this.verify) return;
+    this.verify = null;
+    this.stopPresenting();
+    if (this.canvas) this.canvas.hidden = true;
+    this.render();
+  };
+
   Wallet.prototype.present = function (frames) {
     var self = this;
     this.stopPresenting();
@@ -648,7 +740,7 @@
       var head = /^ur:([a-z0-9-]+)\//i.exec(text);
       if (!head || ACCOUNT_URS.indexOf(head[1].toLowerCase()) === -1) return false;
       collector = collector || scope.URDecode.collector();
-      collector.receive(text);
+      if (!feed(collector, text)) return false;
       if (collector.parts()) {
         self.say("Code " + collector.have() + " of " + collector.parts() + ".");
       }
@@ -697,6 +789,7 @@
         if (scope.Track) scope.Track.milestone("wallet-connected");
         self.render();
         self.refreshSoon();
+        self.offerVerify();
       })
       .catch(function (error) {
         self.stage = "idle";
@@ -1104,6 +1197,25 @@
     var self = this;
     var balance = this.balance();
 
+    // The device is on Verify Address and wants to be shown one. Four words and
+    // the address itself: anybody who has just been told what to do by the
+    // device does not need to be told again in a paragraph.
+    if (this.verify) {
+      var check = element("div", "wal-verify");
+      check.appendChild(element("p", "wal-verify-head", "Your first address"));
+      check.appendChild(element("p", "wal-mono", this.verify.address));
+      check.appendChild(element("p", "wal-verify-say", "Scan it on the device to check it matches."));
+      var row = element("div", "wal-actions");
+      row.appendChild(this.button("Show it to the device", true, function () {
+        self.present([self.verify.address]);
+        self.say("On the device, go to Scan.");
+        self.render();
+      }));
+      row.appendChild(this.button("Done", true, function () { self.doneVerifying(); }));
+      check.appendChild(row);
+      this.body.appendChild(check);
+    }
+
     var big = element("p", "wal-balance", sats(balance.total));
     this.body.appendChild(big);
     if (balance.pending) {
@@ -1123,13 +1235,16 @@
           + "Bitsaga Signet, which is the only place they exist. "
         : "The faucet pays test coins on Bitsaga Signet, which is the only "
           + "place they exist. ";
-      this.body.appendChild(element("p", "wal-say", pays + NOT_REAL));
       if (this.status && this.status.faucet_ready === false) {
         this.body.appendChild(element("p", "wal-pending",
           "The faucet is empty at the moment. Rob has been told; try again shortly."));
       }
+      // Behind the i beside the button rather than above it: what the faucet
+      // pays and what the coins are worth is worth having, and it is not worth
+      // reading every time somebody wants more of them.
       var actions = element("div", "wal-actions");
       actions.appendChild(this.button("Get test bitcoin", true, function () { self.claim(); }));
+      actions.appendChild(this.info(pays + NOT_REAL));
       this.body.appendChild(actions);
       return;
     }
