@@ -67,12 +67,13 @@
                    + "close the tab.";
 
   // The device path to the account key, spelled out because the whole point of
-  // the landing state is that nobody has to guess it. Static rather than the
-  // animated default: the animated form is a ur:crypto-account, and the page's
-  // UR decoder reads ur:crypto-psbt only, so asking for the format that can
-  // actually be read is more honest than reading nothing and blaming the user.
+  // the landing state is that nobody has to guess it. It ends where the device's
+  // own default ends: the animated ur:crypto-account it offers first is read
+  // here now, so there is no extra keypress to ask for and nowhere the path
+  // steers a visitor away from what the device wanted to do. Static is still
+  // read, it just no longer has to be named.
   var EXPORT_PATH = "Seeds → your seed → Export Xpub → Single sig "
-                  + "→ Native Segwit → Static";
+                  + "→ Native Segwit";
 
   var WAITING = "Waiting for Bitsaga Signet to put it in a block, about thirty seconds.";
 
@@ -165,6 +166,7 @@
     "color:#d7dbe0;background:#0b0c0e;border:1px solid #2a2e35;border-radius:5px;",
     "padding:.45rem .6rem}",
     ".wal-field input:focus{outline:2px solid #f7931a;outline-offset:1px}",
+    ".wal-field button{margin-top:.45rem}",
     ".wal-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;",
     "overflow-wrap:anywhere;color:#d7dbe0}",
 
@@ -618,33 +620,47 @@
   // that can spend.
   var ACCOUNT_LINE = /^\[[0-9a-fA-F]{8}(?:\/\d+['h]?)+\][A-Za-z0-9]+$/;
 
+  // The animated forms of the same thing. A crypto-account is what Export Xpub
+  // animates by default, one output descriptor around the account key; a
+  // crypto-hdkey is that key on its own. parseAccount takes the CBOR of either,
+  // so all this has to decide is whether the UR on screen is one of the two.
+  var ACCOUNT_URS = ["crypto-account", "crypto-hdkey"];
+
   /**
-   * Sit and watch the device's screen for an account key.
+   * Sit and watch the device's screen for an account key, however it is written.
    *
    * No button to press: the panel is already looking, so the moment the export
-   * lands on the device's screen the wallet appears. An animated export is the
-   * one thing it cannot use, and that is said in the panel rather than left as
-   * a wait that never ends.
+   * lands on the device's screen the wallet appears. The static form is one QR
+   * and one glance; the animated form is several, and they are counted off as
+   * they are read because a transfer that takes seven frames looks like a
+   * transfer that has stalled unless it says otherwise. That count is the
+   * fountain decoder's own, never a timer dressed up as one: it is codes this
+   * loop actually decoded out of the number the first part declared.
    */
   Wallet.prototype.watchForAccount = function () {
     var self = this;
+    var collector = null;
     this.error = "";
     this.watch(function () {
       var text = self.readDevice();
       if (!text) return false;
       if (ACCOUNT_LINE.test(text.trim())) return text.trim();
-      if (text.toLowerCase().indexOf("ur:") === 0) {
-        self.error = "That QR is the animated export, which this panel cannot "
-                   + "read. Go back one screen on the device and choose Static.";
-        self.render();
+      var head = /^ur:([a-z0-9-]+)\//i.exec(text);
+      if (!head || ACCOUNT_URS.indexOf(head[1].toLowerCase()) === -1) return false;
+      collector = collector || scope.URDecode.collector();
+      collector.receive(text);
+      if (collector.parts()) {
+        self.say("Code " + collector.have() + " of " + collector.parts() + ".");
       }
-      return false;
+      if (!collector.done()) return false;
+      return collector.payload();
     }, 86400000, "the account key on the device's screen")
-      .then(function (text) { return self.connect(text); })
+      .then(function (exported) { return self.connect(exported); })
       .catch(function () { /* the drawer was shut, or the day ran out */ });
   };
 
-  Wallet.prototype.connect = function (text) {
+  /** Connect to whatever the export turned out to be: the line, or the CBOR. */
+  Wallet.prototype.connect = function (exported) {
     var self = this;
     var absent = NEEDS.filter(function (name) {
       return !C || typeof C[name] !== "function";
@@ -664,7 +680,7 @@
     track("connect", "started");
 
     return Promise.resolve()
-      .then(function () { return C.parseAccount(text); })
+      .then(function () { return C.parseAccount(exported); })
       .then(function (account) {
         self.account = account;
         return C.singleSigWallet(account);
@@ -1066,7 +1082,9 @@
     this.body.appendChild(element("p", "wal-path", EXPORT_PATH));
     this.body.appendChild(element("p", "wal-say",
       "Leave that QR on the device's screen. This panel is watching that "
-      + "screen and reads it off by itself; there is nothing here to press."));
+      + "screen and reads it off by itself; there is nothing here to press. "
+      + "The device cycles through several codes by default, and they are "
+      + "counted off here as they are read."));
     this.sayInto(this.body);
   };
 
@@ -1142,6 +1160,7 @@
       self.view = "send";
       self.step = null;
       self.sending = null;
+      self.to = "";
       self.render();
     }));
     row.appendChild(this.button("Get test bitcoin", false, function () { self.claim(); }));
@@ -1197,14 +1216,25 @@
     to.id = "wal-to";
     to.type = "text";
     to.spellcheck = false;
-    to.value = this.payTo();
+    // Empty, and filled only by somebody deciding to fill it. An address that
+    // is already in the box is an address nobody reads, and a wallet that has
+    // quietly chosen who to pay has made the one decision this screen exists to
+    // put in front of you.
+    to.value = this.to || "";
+    to.addEventListener("input", function () { self.to = to.value; });
+    var fill = this.button("Use one of my addresses", false, function () {
+      self.to = self.payTo();
+      to.value = self.to;
+    });
     toField.appendChild(toLabel);
     toField.appendChild(to);
+    toField.appendChild(fill);
 
     form.appendChild(element("p", "wal-say",
-      "There is nobody on this network to pay, so this is filled in with an "
-      + "address of your own wallet. Sending to yourself is a real transaction: "
-      + "it is signed, relayed and mined like any other. " + NOT_REAL));
+      "There is nobody else on this test network to pay, so paying yourself is "
+      + "the honest demonstration, and it is a real transaction either way: "
+      + "signed, relayed and mined like any other. The button under the field "
+      + "fills it with one of your own receive addresses. " + NOT_REAL));
     form.appendChild(amountField);
     form.appendChild(toField);
     this.body.appendChild(form);
@@ -1215,10 +1245,21 @@
       self.view = "balance";
       self.render();
     }));
-    row.appendChild(this.button("Build it", true, function () {
+    // "Create transaction" rather than "Build it": what the button does is the
+    // whole point of the screen, and a wallet nobody has used before should not
+    // ask them to guess what "it" refers to.
+    row.appendChild(this.button("Create transaction", true, function () {
       var value = Math.floor(Number(amount.value));
       if (!(value >= DUST)) {
         self.error = "That is less than the network will relay, which is " + DUST + " sats.";
+        return self.render();
+      }
+      // The field starts empty, so nothing in it is the ordinary way to arrive
+      // here rather than a mistake, and it deserves the sentence that says what
+      // to do rather than the one about what an address begins with.
+      if (!to.value.trim()) {
+        self.error = "There is nowhere to send it yet. Type an address, or use "
+                   + "one of your own.";
         return self.render();
       }
       // Read here rather than three steps later: an address that will not
@@ -1236,15 +1277,14 @@
   };
 
   /**
-   * Where the one tap demo pays.
+   * The address the button under the To field puts in it.
    *
-   * The faucet's own address would be the neat answer and the API does not
-   * publish one, so this falls back to what the multisig tutorial does for the
-   * same reason: a second address of this same wallet. If /status ever names a
-   * faucet address, that is the one line that has to change.
+   * One of this wallet's own and nothing else, because that is what the button
+   * says it is. The faucet's would be the neat alternative, the API does not
+   * publish one, and a button labelled "my addresses" that quietly filled in
+   * somebody else's would be worse than no button.
    */
   Wallet.prototype.payTo = function () {
-    if (this.status && this.status.faucet_address) return this.status.faucet_address;
     // Branch 0, not branch 1. Branch 1 is where the change goes, so paying it
     // put the payment and the change on the same script: the transaction was
     // real and correct, but the device had two identical outputs to show and

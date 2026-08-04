@@ -103,11 +103,37 @@
   /* Which network the wallet is on: a fact worth having up, not a sentence
      worth reading, so it is one small word in the corner rather than a line of
      its own under the device. Mainnet is the exception and shouts, below. */
-  #network {
-    position: absolute; top: 0; right: 0; z-index: 4; margin: 0;
-    font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
-    color: #656c76;
+  #network-line {
+    position: absolute; top: 0; right: 0; z-index: 4;
+    display: flex; align-items: center; gap: .3rem;
   }
+  #network {
+    margin: 0; font-size: .68rem; letter-spacing: .06em;
+    text-transform: uppercase; color: #656c76;
+  }
+  /* The i in front of the label, in the header's idiom but smaller, because
+     what it holds is one paragraph about the network the label names. */
+  #network-note { margin: 0; font-size: .68rem; text-align: left; }
+  #network-note > summary {
+    list-style: none; cursor: pointer; width: 1.05rem; height: 1.05rem;
+    border-radius: 50%; border: 1px solid #3a4048; color: #767d87;
+    display: grid; place-items: center; font: italic 600 .7rem/1 serif;
+  }
+  #network-note > summary::-webkit-details-marker { display: none; }
+  #network-note > summary:hover { color: #f7931a; border-color: #f7931a; }
+  #network-note[open] > summary { color: #f7931a; border-color: #f7931a; }
+  /* Out of the flow and pinned to the right, or opening it would shove the
+     device sideways, and anchored right rather than centred because it hangs
+     off a label already in the corner. */
+  #network-note > div {
+    position: absolute; top: 1.5rem; right: 0; z-index: 11;
+    box-sizing: border-box; width: min(26rem, calc(100vw - 2rem));
+    background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
+    padding: .7rem .9rem; font-size: 1.15em; line-height: 1.55;
+    color: #b6bec8; text-transform: none; letter-spacing: normal;
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, .55);
+  }
+  #network-note > div a { color: #f7931a; }
   footer {
     display: flex; flex-direction: column; align-items: center; gap: .8rem;
     width: 100%; margin-top: 1rem;
@@ -224,7 +250,7 @@
   /* Empty until the wallet has said what its own settings hold. The page keeps
      no copy of this to fall back on, and a guess here would be wrong exactly
      when it matters. */
-  #network:empty { display: none; }
+  #network-line:has(#network:empty) { display: none; }
   /* Mainnet is where a visitor has to have gone deliberately, through the
      device's own menu, so the page stops behaving like a tutorial when they
      do: the invitation to our test network goes away and the warning gets
@@ -456,7 +482,19 @@
     <div id="stage-device">
       <div id="device"></div>
       <canvas id="screen" width="320" height="240"></canvas>
-      <p id="network"></p>
+      <!-- The network, and the one paragraph that is about the network, behind an
+           i in front of it. The paragraph used to sit in the footer, where it
+           explained the label at the top of the page from the bottom of it. -->
+      <div id="network-line">
+        <details class="note" id="network-note">
+          <summary aria-label="About this network" title="About this network">i</summary>
+          <div>This is a simulator, and it starts on Testnet, so you can use it
+          with <a href="/signet">Bitsaga Signet</a>, our own test network. These
+          are not real bitcoin. They exist only on our test network, cannot be
+          sold or sent to anyone, and are worth nothing.</div>
+        </details>
+        <p id="network"></p>
+      </div>
       <p id="status">starting…</p>
       <!-- Only offered where it is any use: on a phone, where the page around the
            device is what is making the device small. -->
@@ -477,10 +515,6 @@
     </div>
     <p class="hint">Click the device buttons, or use the keyboard: arrows move · Enter selects · 1 2 3 are the side buttons</p>
   </div>
-  <p class="note">This is a simulator, and it starts on Testnet, so you can use it
-  with <a href="/signet">Bitsaga Signet</a>, our own test network. These are not real
-  bitcoin. They exist only on our test network, cannot be sold or sent to anyone, and
-  are worth nothing.</p>
   </footer>
 
 <script src="seedsigner-device.js"></script>
@@ -573,7 +607,7 @@ const networkEl = document.getElementById("network");
 // it down, so anything they cover is unclickable while they are open, and a
 // visitor who has finished reading one should not have to find the same small
 // chip again to get their device back. Click anywhere outside, or Escape.
-for (const panel of document.querySelectorAll("header > details")) {
+for (const panel of document.querySelectorAll("header > details, #network-note")) {
   document.addEventListener("pointerdown", (event) => {
     if (panel.open && !panel.contains(event.target)) panel.open = false;
   });
@@ -584,7 +618,11 @@ for (const panel of document.querySelectorAll("header > details")) {
   // clicking anywhere else, Escape -- and counting those would say it was used
   // twice as often as it was.
   panel.addEventListener("toggle", () => {
-    if (panel.open) track.event("page", "about-open");
+    if (!panel.open) return;
+    // Two panels now, and they answer different questions: one is what this
+    // whole thing is, the other is which chain the coins on it are worth
+    // nothing on. Counting them as one would hide which was actually read.
+    track.event("page", panel.id === "network-note" ? "network-note-open" : "about-open");
   });
 }
 

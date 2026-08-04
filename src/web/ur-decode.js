@@ -1,9 +1,16 @@
-// Reading the animated QR a SeedSigner shows after it signs.
+// Reading the animated QRs a SeedSigner shows.
 //
-// A signed PSBT does not fit in one QR, so the device emits a ur:crypto-psbt in
-// parts and cycles through them for ever. The coordinator on the phone has to
-// collect them and put the transaction back together, which is what a real
-// coordinator does with a real device.
+// Neither a signed transaction nor an exported account key fits in one QR, so
+// the device emits a ur:crypto-psbt or a ur:crypto-account in parts and cycles
+// through them for ever. The coordinator on the phone has to collect them and
+// put the message back together, which is what a real coordinator does with a
+// real device.
+//
+// Nothing below cares which of them it is holding: the parts of any UR are
+// numbered, mixed and checksummed the same way, so the type is read off the
+// first part, carried along, and handed back with the payload for the caller to
+// make sense of. Hardcoding one type here is what made the device's own default
+// export unreadable, and there was never anything type-specific to hardcode.
 //
 // The part that has to be got right is the fountain code. The first N parts a
 // device emits are the plain fragments of the message, in order, and everything
@@ -279,12 +286,15 @@
   }
 
   /**
-   * Collects the parts of one ur:crypto-psbt until it has the whole message.
+   * Collects the parts of one UR until it has the whole message.
    *
    * receive() takes whatever the QR reader saw; done() says whether the message
-   * is complete; psbt() hands back the PSBT inside it.
+   * is complete; type() names what it turned out to be and payload() hands back
+   * the CBOR it carries. psbt() is payload() with the byte string a
+   * ur:crypto-psbt wraps its transaction in taken off.
    */
   function collector() {
+    var type = null;
     var single = null;
     var seqLength = null, messageLength = null, checksum = null;
     var simple = {};      // fragment index -> bytes
@@ -326,14 +336,39 @@
       pending.forEach(absorb);
     }
 
+    /**
+     * The message, whole, and never a message a CRC32 did not agree with.
+     *
+     * There are two roads to it and each carries its own check: a single part
+     * ends in four bytewords that are a CRC32 of everything before them, which
+     * bytewords() refuses it over, and a message put back together out of parts
+     * is checked here against the checksum every one of those parts declared.
+     * Neither check stands in for the other and neither is skipped.
+     */
+    function message() {
+      if (single) return single;
+      var whole = new Uint8Array(seqLength * simple[0].length);
+      for (var n = 0; n < seqLength; n++) whole.set(simple[n], n * simple[0].length);
+      whole = whole.subarray(0, messageLength);
+      if (crc32(whole) !== checksum) throw new Error("the reassembled ur:" + type + " is corrupt");
+      return whole;
+    }
+
     return {
       receive: function (text) {
         if (!text) return false;
         var lower = String(text).toLowerCase();
-        if (lower.indexOf("ur:crypto-psbt/") !== 0) return false;
+        var head = /^ur:([a-z0-9-]+)\//.exec(lower);
+        if (!head) return false;
+        // One message per collector. Two UR types on one screen means the
+        // device has moved on to something else, and the parts of one message
+        // are nothing but noise to another: the fountain numbers them against
+        // their own message's length and checksum.
+        if (type === null) type = head[1];
+        else if (type !== head[1]) return false;
         var pieces = lower.split("/");
         if (pieces.length === 2) {
-          single = unwrap(bytewords(pieces[1]));
+          single = bytewords(pieces[1]);
           return true;
         }
         var part = cbor(bytewords(pieces[2]));
@@ -356,14 +391,13 @@
 
       parts: function () { return seqLength; },
       have: function () { return single ? 1 : known; },
+      type: function () { return type; },
+
+      payload: function () { return message(); },
 
       psbt: function () {
-        if (single) return single;
-        var message = new Uint8Array(seqLength * simple[0].length);
-        for (var n = 0; n < seqLength; n++) message.set(simple[n], n * simple[0].length);
-        message = message.subarray(0, messageLength);
-        if (crc32(message) !== checksum) throw new Error("the reassembled PSBT is corrupt");
-        return unwrap(message);
+        if (type !== "crypto-psbt") throw new Error("that is a ur:" + type + ", not a transaction");
+        return unwrap(message());
       },
     };
   }

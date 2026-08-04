@@ -15,6 +15,7 @@ many to give.
 
     python3 test/test_wallet_live.py                 the whole thing
     python3 test/test_wallet_live.py --no-multi      the happy path only
+    python3 test/test_wallet_live.py --new-seed      make the seed on the device
     python3 test/test_wallet_live.py --headed        watch it
 
 What is driven, in order, and what is believed at each point:
@@ -22,6 +23,9 @@ What is driven, in order, and what is believed at each point:
   1. boot, then a SeedQR held up to Chromium's fake camera, exactly as
      test_scan.py does it, carrying the published BIP39 vector
      "army van defense ...". Believed when the device says SeedFinalizeScreen.
+     With --new-seed this one stage is replaced: the device makes the seed
+     itself, out of its own dice screens, and no camera is opened at all. See
+     create_a_seed(). Everything from stage 2 down is the same code either way.
   2. Seeds -> the seed -> Export Xpub -> Single sig -> Native Segwit -> Static,
      driven by the device's own keys. The panel is watching the device's screen
      and connects with nothing pressed on it. Believed when the panel shows a
@@ -49,6 +53,24 @@ asks the visitor to approve giving away every satoshi that went in. What is
 signed is correct and the change really does come back, which is why everything
 downstream of it passes; what the visitor was shown was not. One byte in
 src/web/signet-coordinator.js, deliberately not fixed here.
+
+A second finding, and it is why --new-seed steers by button numbers rather than
+by names. src/web/wallet-worker.js wraps View.run to narrate "View.run enter:
+<ViewName>", with the comment that a view can stall before it ever builds a
+screen and so is worth tracing one level up. It never fires. Every View in
+SeedSigner overrides run(), so patching the base class's run() rebinds an
+attribute nothing ever looks up, and a whole boot and every menu in this file
+produce exactly zero of those lines. The tracing costs nothing and proves
+nothing. Deliberately not fixed here: one line in src/web/wallet-worker.js.
+
+--new-seed and the faucet. A seed nobody has ever used holds nothing, so this
+mode cannot be run against coins an earlier run left behind and cannot be
+combined with --no-claim; it has to ask the faucet. The faucet allows a fixed
+number of claims per IP per day, and once that is spent there is no way to fund
+the wallet and no way to reach the spend. That is not this file failing, and it
+is not this file passing either, so it is neither: a refusal at the faucet is
+caught as FaucetRefused, said out loud, and the run exits 3. 0 still means every
+check passed, 1 still means one did not.
 
 Three things about the scaffolding, none of which touches the code under test:
 
@@ -106,6 +128,48 @@ SPEND_SATS = 20000
 # not confirmed yet, and it is the one such statement that does not depend on a
 # round trip finishing before the next block does.
 WAITING = "Waiting for Bitsaga Signet to put it in a block"
+
+# --- what --new-seed rolls, and what those rolls have to come out as ----------
+#
+# The device wants 50 rolls for a 12 word seed and refuses a run of them that is
+# not random enough (mnemonic_generation.dice_entropy_is_sufficient, Shannon
+# entropy of the roll string, threshold 2.0 bits per symbol). So the rolls
+# cannot be 50 of the same face; they walk the six faces in a fixed order
+# instead, which comes to 2.58 bits and is still the same every run.
+#
+# Fixed rather than random on purpose. A random run would make an unreachable
+# wallet every time and strand its change there forever, on a chain whose faucet
+# is rationed; these rolls always make the same wallet, so what one run leaves
+# behind is still there for the next one. It is a new seed the first time and a
+# known one afterwards, and either way the device is the thing that built it.
+#
+# The keyboard is a 3x3 grid holding six keys, 1 2 3 above 4 5 6, and it opens
+# on 1. One move per roll walks 1 2 3 6 5 4 and back to 1, so no press ever
+# reaches an edge and nothing depends on how the keyboard wraps.
+DICE_ROLLS = 50
+DICE_MOVES = ["ArrowRight", "ArrowRight", "ArrowDown", "ArrowLeft", "ArrowLeft", "ArrowUp"]
+
+# The master fingerprint those rolls have to produce, worked out here rather
+# than recorded from a run: SeedSigner hashes the roll string with SHA-256, take
+# the first 16 bytes as BIP39 entropy, and that mnemonic is
+#
+#   travel assume abandon brush behind sauce fly badge census dose that drastic
+#
+# whose BIP32 master key hashes to this. The panel reads the fingerprint out of
+# the key origin the device exported, so checking it says the device's dice
+# screens, its entropy and its export all agree with the arithmetic. It is also
+# how this mode proves it is not quietly running on the scanned vector, which is
+# b2269592.
+NEW_SEED_FINGERPRINT = "c55970ff"
+
+
+class FaucetRefused(Exception):
+    """The faucet said no, which is a state of the world and not a bug.
+
+    Its own words, so the run can repeat them rather than paraphrase. Raised
+    instead of failing a check because there is nothing here to fix: the daily
+    allowance is spent and the only cure is tomorrow.
+    """
 
 
 # --- the chain, read from outside the browser --------------------------------
@@ -231,6 +295,49 @@ def press(page, *keys, gap=280):
 
 def screen_is(log, name, timeout, since=0):
     return log.wait(r"display\(\) enter: " + name + r"\b", timeout, name, since=since)
+
+
+def listening(log, timeout, since=0):
+    """Wait until the device is parked on a keypress again.
+
+    The page hands the device its buttons through one slot, not a queue: a key
+    sits in it until the device takes it, and a second key posted before then
+    overwrites the first rather than lining up behind it. So two presses either
+    side of a screen change are not safe at any fixed spacing. The first is
+    posted while the new screen is still being built, the second replaces it,
+    and the device sees one key where two were sent.
+
+    "wait_for keys=" is the device saying it has taken everything it was given
+    and is blocked waiting for more, which is the only moment a press is certain
+    to be seen. It cost this file two runs to find that out.
+    """
+    return log.wait(r"wait_for keys=", timeout, "the device to want a key", since=since)
+
+
+def tap(page, log, key):
+    """One button, and no return until the device has actually taken it."""
+    mark = log.mark()
+    press(page, key)
+    listening(log, 60, since=mark)
+
+
+def chose(log, screen, index, timeout, since=0):
+    """Wait for a list screen to close, and hold it to which button closed it.
+
+    The device narrates the way out of a screen as well as the way in:
+    "display() exit: ButtonListScreen -> 4" is it saying the fifth button was
+    the one taken. That matters on the road to the dice, because every menu on
+    it is a ButtonListScreen and the name alone cannot tell them apart, so a
+    press that lands one row off would otherwise go unnoticed until something
+    much later made no sense.
+
+    It is the exit line rather than the entry line for the next screen because
+    it is the only narration that carries a number. The device also traces
+    "View.run enter: <ViewName>", which would name the destination outright and
+    would be the better oracle, but it never appears: see this file's header.
+    """
+    return log.wait(rf"display\(\) exit: {screen} -> {index}\b", timeout,
+                    f"{screen} -> {index}", since=since)
 
 
 def go_home(page, log, tries=8):
@@ -393,6 +500,125 @@ def narrate(log, why):
 
 
 # --- the flow ----------------------------------------------------------------
+#
+# Stage 1 is the only stage with two versions of it, and they are the two ways a
+# visitor can arrive at a loaded seed. Both end on SeedFinalizeScreen, which is
+# where export_the_account() starts, so nothing below stage 1 knows or cares
+# which of them ran.
+
+
+def scan_the_seed(page, log):
+    """A SeedQR held up to the fake camera, which is where this file began.
+
+    The published BIP39 vector, the same one the rest of the suite scans, so the
+    wallet it lands on is the same wallet every run and whatever an earlier run
+    left in it is still there.
+    """
+    mark = log.mark()
+    press(page, "Enter")                       # Scan, the first thing on the home screen
+    screen_is(log, "ScanScreen", 90, since=mark)
+    check("nothing is decoded from the video's blank lead-in",
+          log.seen(r"display\(\) enter: SeedFinalizeScreen") is None)
+    screen_is(log, "SeedFinalizeScreen", 240, since=mark)
+    check("the SeedQR decodes and the device loads the seed", True)
+
+
+def create_a_seed(page, log):
+    """Home -> Seeds -> Create a seed -> New seed (dice) -> 12 words -> 50 rolls.
+
+    The path a first time visitor takes when they have nothing to scan, and the
+    reason this mode exists: the device's own entropy, its own word review and
+    its own finalisation had never been driven by anything, because every other
+    test in this suite starts from a seed that already existed.
+
+    Dice rather than the camera, which is the other offer on that menu. The
+    camera's entropy is os.urandom and the wall clock mixed into a photograph,
+    so it cannot be checked against anything; a fixed run of dice is a number
+    this file can work out for itself, which is what NEW_SEED_FINGERPRINT is.
+
+    Where a press is counted, it is because a ButtonListScreen does not say
+    which of its buttons is selected, so there is nothing else to steer by; and
+    every count is then held to the button number the device says it took, so a
+    press that lands one row off is caught where it happens. Every press waits
+    for the device to want it (see tap), because the button slot holds one key
+    and the second of two fast presses replaces the first.
+
+    The stretch between the rolls and the backup prompt is not counted at all
+    and is left to advance(): how many pages of words the device decides to show
+    is the device's business, and pressing past a screen because a count said so
+    is how a device's own opinion goes unread.
+    """
+    # Seeds with nothing in memory is Load a Seed: SeedsMenuView has no list of
+    # its own to show, so it forwards, and the screen after the home grid is
+    # already that list.
+    tap(page, log, "ArrowRight")               # Scan -> Seeds on the home grid
+    mark = log.mark()
+    tap(page, log, "Enter")
+    chose(log, "MainMenuScreen", 1, 30, since=mark)
+    check("with no seeds in memory, Seeds goes straight to Load a Seed",
+          log.last_screen() == "ButtonListScreen", log.last_screen() or "nothing")
+
+    # Scan a SeedQR, Enter 12-word, Enter 24-word, From SeedKeeper, [Create a
+    # seed]. The list is built from settings and this is what the simulator's
+    # settings make it: word lengths 12 and 24, smartcard support on, Electrum,
+    # SLIP39, Aezeed and the three backup formats all off.
+    for _ in range(4):
+        tap(page, log, "ArrowDown")
+    mark = log.mark()
+    tap(page, log, "Enter")
+    chose(log, "ButtonListScreen", 4, 30, since=mark)
+    check("Create a seed is the fifth thing offered, and it is what was taken", True)
+
+    # Two ways to make a seed and they are both called "New seed": the camera
+    # first, the dice second.
+    tap(page, log, "ArrowDown")
+    mark = log.mark()
+    tap(page, log, "Enter")
+    chose(log, "ButtonListScreen", 1, 30, since=mark)
+
+    mark = log.mark()
+    tap(page, log, "Enter")                    # 12 words, first of 12 and 24
+    chose(log, "ButtonListScreen", 0, 30, since=mark)
+    check("the device asks for its 50 dice rolls",
+          log.last_screen() == "ToolsDiceEntropyEntryScreen",
+          log.last_screen() or "nothing")
+
+    rolling = log.mark()
+    for roll in range(DICE_ROLLS):
+        if roll:
+            tap(page, log, DICE_MOVES[(roll - 1) % len(DICE_MOVES)])
+        tap(page, log, "Enter")
+        if roll == DICE_ROLLS // 2:
+            device_shot(page, "02-dice")
+
+    # The screen returns itself once the last roll lands, so arriving anywhere
+    # else is the whole roll sequence having been counted. An ErrorScreen here
+    # is the device saying the rolls were not random enough, which would mean
+    # DICE_MOVES no longer walks all six faces.
+    check("the rolls are random enough for the device to accept them",
+          log.seen(r"display\(\) enter: ErrorScreen", since=rolling) is None)
+
+    reached = advance(page, log, "SeedWordsBackupTestPromptScreen", 12,
+                      capture={"DireWarningScreen": "02-dire-warning",
+                               "SeedWordsScreen": "02-words"})
+    check("the device warns about the words, shows them, and offers to test them",
+          reached, log.last_screen() or "nothing")
+    if not reached:
+        narrate(log, "the new seed never reached its backup prompt")
+        raise AssertionError("no SeedWordsBackupTestPromptScreen after the rolls")
+
+    # Verify, Review, [Skip]. Skip is the one that finalises: verify is a game of
+    # picking words back out and review is the pages again, and neither is what
+    # this test is here to drive.
+    tap(page, log, "ArrowDown")
+    tap(page, log, "ArrowDown")
+    mark = log.mark()
+    tap(page, log, "Enter")
+    chose(log, "SeedWordsBackupTestPromptScreen", 2, 30, since=mark)
+    screen_is(log, "SeedFinalizeScreen", 120, since=mark)
+    check("the device finalises the seed it built", True)
+    check("and built it with no camera anywhere in it",
+          log.seen(r"display\(\) enter: ScanScreen") is None)
 
 
 def export_the_account(page, log):
@@ -451,7 +677,17 @@ def claim_and_confirm(page, stage, payout):
             pending_row[0] = True
         return WAITING in says(page)
 
-    until(page, waiting, 180, "the panel to say the faucet has paid")
+    # A complaint in the panel while this wait is running came out of the claim
+    # and nothing else, so it is the faucet's own answer: out of allowance, out
+    # of coins, or this address asking again too soon. None of those is a defect
+    # in anything under test, so it leaves by a different door.
+    try:
+        until(page, waiting, 180, "the panel to say the faucet has paid")
+    except AssertionError:
+        said = complaint(page)
+        if said:
+            raise FaucetRefused(said)
+        raise
     check(f"[{stage}] the panel says the faucet payment is not in a block yet", True)
     shot(page, stage + "-funded-pending")
 
@@ -488,11 +724,18 @@ def spend(page, log, stage, amount, expect_inputs, destination=None):
     page.locator("#wal-amount").fill(str(amount))
     if destination:
         page.locator("#wal-to").fill(destination)
+    elif not page.locator("#wal-to").input_value():
+        # Whichever way the panel has it. It used to arrive with one of the
+        # wallet's own addresses already in the box and now deliberately
+        # arrives empty, on the grounds that an address nobody typed is an
+        # address nobody reads; either way the visitor with nobody to pay
+        # presses the panel's own button, so that is what this presses.
+        page.locator("#wallet button", has_text="Use one of my addresses").first.click()
     destination = page.locator("#wal-to").input_value()
     print(f"  [{stage}] sending {amount} sats to {destination}", flush=True)
     shot(page, stage + "-send-form")
 
-    page.locator("#wallet button", has_text="Build it").first.click()
+    page.locator("#wallet button", has_text="Create transaction").first.click()
 
     # The panel builds the PSBT and puts the codes up before it tells anybody to
     # scan, which is the order that matters: the page hands the camera over at
@@ -651,9 +894,26 @@ def main(argv) -> int:
     # signing path actually needs.
     parser.add_argument("--no-claim", action="store_true",
                         help="skip the faucet and spend the balance already there")
+    parser.add_argument("--new-seed", action="store_true",
+                        help="make a seed on the device instead of scanning one")
     args = parser.parse_args(argv[1:])
 
+    # The two cannot meet. --no-claim exists to spend what an earlier run left
+    # behind, and the first run of --new-seed has nothing behind it: the wallet
+    # it makes has never been paid, so there is no balance to skip the faucet
+    # for. Refused here rather than left to time out, because --no-claim waits
+    # for a balance for as long as it takes.
+    # Allowed, with one caveat worth knowing. The dice rolls are fixed, so the
+    # seed --new-seed makes is the same seed every time and keeps what earlier
+    # runs paid it: after one funded run this pair costs the faucet nothing, and
+    # the signing path can be driven all day. It is only the very first run on a
+    # given chain that has nothing to spend, and that one ends in the wait below
+    # saying so rather than in a refusal here.
+
     if not os.path.exists(Y4M):
+        # Wanted even by --new-seed, which never decodes it: Chromium is told to
+        # back its fake camera with this file at launch, and the device still
+        # opens that camera later to read the PSBT off the panel's canvas.
         print(f"no {Y4M}: run test/make_qr_y4m.py first", file=sys.stderr)
         return 2
 
@@ -667,6 +927,7 @@ def main(argv) -> int:
 
     started = time.time()
     sent = []
+    refusal = None
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not args.headed, args=[
@@ -702,13 +963,10 @@ def main(argv) -> int:
                   page.locator("#wallet-strip").count() == 1)
             shot(page, "01-booted")
 
-            mark = log.mark()
-            press(page, "Enter")               # Scan, the first thing on the home screen
-            screen_is(log, "ScanScreen", 90, since=mark)
-            check("nothing is decoded from the video's blank lead-in",
-                  log.seen(r"display\(\) enter: SeedFinalizeScreen") is None)
-            screen_is(log, "SeedFinalizeScreen", 240, since=mark)
-            check("the SeedQR decodes and the device loads the seed", True)
+            if args.new_seed:
+                create_a_seed(page, log)
+            else:
+                scan_the_seed(page, log)
             device_shot(page, "02-seed")
 
             # -------------------------------------------- 2. the account key
@@ -732,6 +990,21 @@ def main(argv) -> int:
             check("the panel connects off the device's screen with nothing pressed on it",
                   True, panel(page, ".wal-balance"))
             shot(page, "04-connected")
+
+            # The one place a generated seed can be checked against arithmetic
+            # this file did itself. The fingerprint came out of the key origin
+            # the device wrote into its export, so it is the device's answer to
+            # what those 50 rolls mean, and NEW_SEED_FINGERPRINT is this file's.
+            if args.new_seed:
+                made = page.evaluate(
+                    "() => WalletCoordinator.current.account.fingerprint")
+                check("the seed the device rolled is the one those rolls define",
+                      made == NEW_SEED_FINGERPRINT,
+                      f"{made}, and this file worked out {NEW_SEED_FINGERPRINT}")
+                # Nothing at all the first time these rolls are ever made, and
+                # whatever the last run left the time after that.
+                print(f"  the wallet those rolls make holds {balance(page)} sats",
+                      flush=True)
 
             # Back to the home screen, and off the QR, before anything else.
             check("the device comes back to its home screen after the export",
@@ -794,6 +1067,13 @@ def main(argv) -> int:
                 check("the multi input spend really pays somewhere other than its change",
                       second.get("scripts") == 2, f"{second.get('scripts')} distinct scripts")
 
+        except FaucetRefused as exc:
+            refusal = str(exc)
+            print(f"\n  THE FAUCET REFUSED: {refusal}", flush=True)
+            print("  Every check above this line ran and is real. Nothing below it "
+                  "could be tried,\n  because there are no coins to spend and no way "
+                  "to get any today.", flush=True)
+            shot(page, "06-faucet-refused")
         except AssertionError as exc:
             check("the run reaches the end", False, str(exc))
             narrate(log, "the run stopped early")
@@ -801,7 +1081,7 @@ def main(argv) -> int:
             shot(page, "99-final")
             said = complaint(page)
             check("the panel is not complaining about anything at the end",
-                  not said, said)
+                  not said or said == refusal, said)
             check("no page errors and no content security policy violations",
                   not errors, "; ".join(errors[:3]))
             browser.close()
@@ -818,7 +1098,15 @@ def main(argv) -> int:
     if not sent:
         print("  no transaction was ever broadcast")
     print(f"\nwhole run: {elapsed:.0f}s")
-    return report()
+
+    code = report()
+    if refusal and code == 0:
+        print("\nNOT A PASS AND NOT A FAILURE. The faucet refused: " + refusal
+              + "\nEverything this run could check, it checked. The spend, the "
+                "signature and the\nbroadcast were never attempted, so this run "
+                "says nothing about them either way.")
+        return 3
+    return code
 
 
 if __name__ == "__main__":
