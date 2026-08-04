@@ -3,11 +3,11 @@
 [![try it live](https://img.shields.io/badge/try%20it-live-f7931a?style=flat-square)](https://bitsaga.be/seedsigner-simulator/)
 [![smartcard fork](https://img.shields.io/badge/smartcard%20fork-SeSi--0.8.7%2BShSi--B11-blue?style=flat-square)](UPSTREAM)
 [![stock](https://img.shields.io/badge/stock-0.8.7-blue?style=flat-square)](UPSTREAM)
-[![reproducible-build](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/reproducible-build.yml?branch=main&label=reproducible%20build&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/reproducible-build.yml)
-[![tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/test.yml)
-[![upstream tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-sim/upstream-tests.yml?branch=main&label=upstream%20tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/actions/workflows/upstream-tests.yml)
-[![release](https://img.shields.io/github/v/release/bitsagarob/seedsigner-sim?style=flat-square)](https://github.com/bitsagarob/seedsigner-sim/releases/latest)
-[![licence](https://img.shields.io/github/license/bitsagarob/seedsigner-sim?style=flat-square)](LICENSE)
+[![reproducible-build](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-simulator/reproducible-build.yml?branch=main&label=reproducible%20build&style=flat-square)](https://github.com/bitsagarob/seedsigner-simulator/actions/workflows/reproducible-build.yml)
+[![tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-simulator/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-simulator/actions/workflows/test.yml)
+[![upstream tests](https://img.shields.io/github/actions/workflow/status/bitsagarob/seedsigner-simulator/upstream-tests.yml?branch=main&label=upstream%20tests&style=flat-square)](https://github.com/bitsagarob/seedsigner-simulator/actions/workflows/upstream-tests.yml)
+[![release](https://img.shields.io/github/v/release/bitsagarob/seedsigner-simulator?style=flat-square)](https://github.com/bitsagarob/seedsigner-simulator/releases/latest)
+[![licence](https://img.shields.io/github/license/bitsagarob/seedsigner-simulator?style=flat-square)](LICENSE)
 
 Real [SeedSigner](https://seedsigner.com) device firmware, the actual Python off
 the device, running in a browser tab. Its screen is a canvas, its buttons are
@@ -48,8 +48,8 @@ only by tests we wrote ourselves about somebody else's code.
 ## Try it
 
 ```sh
-git clone https://github.com/bitsagarob/seedsigner-sim.git
-cd seedsigner-sim
+git clone https://github.com/bitsagarob/seedsigner-simulator.git
+cd seedsigner-simulator
 ./build/fetch-assets.sh              # Pyodide, pinned and hash-checked (~26 MB, once)
 ./build/build-wallet-zip.sh smartcard   # wallet-smartcard.zip, from the pinned commit
 ./build/build-wallet-zip.sh stock       # wallet-stock.zip, from the pinned commit
@@ -125,7 +125,7 @@ the worked example and what the resulting hashes mean.
 - **A machine re-derives both hashes on every push**, on a runner that has never
   seen this repository and shares no cache with anything, and GitHub signs the
   result:
-  `gh attestation verify wallet-smartcard.zip --repo bitsagarob/seedsigner-sim`.
+  `gh attestation verify wallet-smartcard.zip --repo bitsagarob/seedsigner-simulator`.
 - **Upstream's own tests run against our pinned versions**, both firmwares, each
   against its own pin ([`upstream-tests.yml`](.github/workflows/upstream-tests.yml)):
   949 tests from the fork's 22,000-line suite, and the whole of stock's smaller

@@ -66,7 +66,7 @@ So the interesting risks are not the usual ones. They are:
 ## Reporting
 
 Use GitHub's private vulnerability reporting on
-[bitsagarob/seedsigner-sim](https://github.com/bitsagarob/seedsigner-sim):
+[bitsagarob/seedsigner-simulator](https://github.com/bitsagarob/seedsigner-simulatorulator):
 **Security → Report a vulnerability**. That channel is private to the maintainers.
 
 If it is not sensitive (a documentation error, a missing warning, a hardening

@@ -55,7 +55,7 @@ representing the project in public.
 ## Reporting
 
 Report abusive, harassing or otherwise unacceptable behaviour to the maintainers
-of [bitsagarob/seedsigner-sim](https://github.com/bitsagarob/seedsigner-sim). For
+of [bitsagarob/seedsigner-simulator](https://github.com/bitsagarob/seedsigner-simulatorulator). For
 anything that needs to stay private, GitHub's private vulnerability reporting
 (**Security → Report a vulnerability**) is the one private channel this repository
 has, and it is fine to use it for a conduct report; say at the top that it is not

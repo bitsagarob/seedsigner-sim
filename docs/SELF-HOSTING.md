@@ -96,11 +96,11 @@ A real web server has one document root, so flatten the same three sources into 
 directory:
 
 ```sh
-mkdir -p /srv/seedsigner-sim
-cp -r src/web/.  /srv/seedsigner-sim/     # page, scripts, icons, and pyodide/
-cp src/shims/browser_*.py /srv/seedsigner-sim/
-cp build/out/wallet-*.zip /srv/seedsigner-sim/
-cp build/out/wallet-*.build-info.json /srv/seedsigner-sim/
+mkdir -p /srv/seedsigner-simulator
+cp -r src/web/.  /srv/seedsigner-simulatorulator/     # page, scripts, icons, and pyodide/
+cp src/shims/browser_*.py /srv/seedsigner-simulatorulator/
+cp build/out/wallet-*.zip /srv/seedsigner-simulatorulator/
+cp build/out/wallet-*.build-info.json /srv/seedsigner-simulatorulator/
 ```
 
 What ends up there, and why each piece has to be exactly where it is (the page,
@@ -176,7 +176,7 @@ server {
     listen 443 ssl;
     server_name sim.example.org;
 
-    root /srv/seedsigner-sim;
+    root /srv/seedsigner-simulator;
     index index.html;
 
     # Both are required, on every response -- the worker, the wasm and
@@ -201,7 +201,7 @@ Two nginx-specific traps:
 
 ```caddyfile
 sim.example.org {
-    root * /srv/seedsigner-sim
+    root * /srv/seedsigner-simulator
     header {
         Cross-Origin-Opener-Policy   same-origin
         Cross-Origin-Embedder-Policy require-corp

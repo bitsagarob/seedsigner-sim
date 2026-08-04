@@ -289,7 +289,7 @@ references_in() {
 # Go
 # ---------------------------------------------------------------------------
 
-echo "seedsigner-sim deploy check"
+echo "seedsigner-simulator deploy check"
 echo "  site   ${SITE_URL}"
 if git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
     dirty=""

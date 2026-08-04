@@ -49,7 +49,7 @@
 9a57aa6f3bc855eec5be23a9e56bb6d0435e02e1848dcd625c6296482064ac7f  src/web/doom-boot.js
 1ebb8267bb112587c9739a7f30fd9197c3e0137a0fcd4677f6a8677b6fa307f5  src/web/icon-192.png
 2c740b578143c67bbca1f950c33fe62d2a06fd22d5c0a7adf58348dc648e09bf  src/web/icon-512.png
-6d80f38a10e12d778a000ecea1c1036fe3075a708559d56b8bbf8e4678e470bc  src/web/index.html
+b2f46a3057bb42851a5977df1590fd22ceba7e8f35ae025e64b11e31003dba9e  src/web/index.html
 bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.js
 2e84bdc9ea48e5be912aaf9adf59868102ec4851be790bfe7c6cba006b419ac4  src/web/manifest.json
 75d7bbeb31dfd951e2d2dcd768f0c42e54faaf10d4fd23f1fa4c50e99abbdc10  src/web/qr-encode.js
@@ -63,7 +63,7 @@ d6361ecad60e76c475597670a4d4691448fff89e4dc0864d7334d7f6a74e616b  src/web/wallet
 c2b6c3dab126fc5ca5803616ba7e2ec6e58ac41b6d91a7513dd934211cf863d6  src/web/wallet-track.js
 5fb474ace6000daad38a40e4919cd5cf55436bbf6b0069cf180d3bbf83093f2c  src/web/wallet-tutorial.js
 8f7795bfb9e0b7ac87dfe3b4067afb6b4b2f3411fbd9091d8f40b2e800ae9ac3  src/web/wallet-worker.js
-0b77117056614dc2bf0a71afdf77cd8e2d4c5f91effbda2aa2f7e6c2eeefc251  src/web/wallet.html
+a1d3f4da908b98a82e1071165bc7fb14fec7a98da9eb548502af5195d8e96655  src/web/wallet.html
 
 # The stand-in packages, which build/build-wallet-zip.sh copies out of the working
 # tree and into a wallet zip whole. Every other input to that zip is pinned by a

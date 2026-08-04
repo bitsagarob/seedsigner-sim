@@ -79,3 +79,44 @@ tag    = v0.12
 repo   = https://github.com/Toporin/Seedkeeper-Applet.git
 commit = 2e59f0653c5dd39f6793ee5c41ee7344ffdeb48f
 tag    = v0.2-0.1
+
+# The boot game, which is not a firmware and does not replace one.
+#
+# DoomSigner is SeedSigner OS with a game in front of the wallet: the device
+# boots into DOOM and hands off on KEY1, KEY2, KEY3, and the wallet it hands off
+# to is the smartcard fork pinned above, unchanged. So there is no third wallet
+# zip here and there should not be. What is pinned is the tree the browser build
+# of the game is compiled from.
+#
+# A tag, like every other pin in this file, and for a reason this repository has
+# already met: main over there has been force-pushed, and a pin that follows a
+# branch is a pin that can be rewritten out from under a rebuild. The tag names
+# one commit and stays on it.
+#
+# build/build-doom-wasm.sh compiles this with emscripten over an unmodified
+# doomgeneric. The picture is the device's own: it compiles the port's ss_video.c,
+# so the browser is handed the RGB565 the panel would be sent rather than DOOM's
+# native 320x200 put on a canvas.
+
+[doomsigner]
+repo   = https://github.com/bitsagarob/doomsigner.git
+commit = 4285bda39b59e3344fd04f0794791580f70e3b0c
+tag    = doomsigner-v0.1
+
+emscripten = 6.0.5
+
+doom_js_sha256   = 6b3e0c7f6dc2a582d4d540069e1c9a864868075d295a30ae289c5388659be7b6
+doom_wasm_sha256 = 4a8024b582c93bc9d481df871e0b570132b2244524a3aeb7ab2c69fc53b4aebf
+doom_run_sha256  = 59c64231bdbe5940a7ab918e816c507618bd9a55712f96fdc93730af6f406936
+
+# doomgeneric itself, which nothing here patches.
+[doomgeneric]
+repo   = https://github.com/ozkl/doomgeneric.git
+commit = dcb7a8dbc7a16ce3dda29382ac9aae9d77d21284
+
+# The game's data, which is not code and is not built. Freedoom rather than a
+# retail WAD because it is freely redistributable, which is what makes it
+# servable from a public site at all.
+[freedoom]
+release    = v0.13.0
+wad_sha256 = 7323bcc168c5a45ff10749b339960e98314740a734c30d4b9f3337001f9e703d

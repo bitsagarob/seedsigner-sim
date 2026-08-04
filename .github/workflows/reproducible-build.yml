@@ -149,7 +149,7 @@ jobs:
       # Having re-derived the published hash, say so in a form that is not our
       # word for it. GitHub signs a statement that this exact file came out of
       # this workflow, at this commit, and records it against the repository;
-      # `gh attestation verify wallet-smartcard.zip --repo bitsagarob/seedsigner-sim`
+      # `gh attestation verify wallet-smartcard.zip --repo bitsagarob/seedsigner-simulator`
       # checks it against a file you downloaded, with nothing from us involved.
       # Both firmwares are attested, each by its own matrix leg, because both are
       # served and either one is a file somebody may want to check.
