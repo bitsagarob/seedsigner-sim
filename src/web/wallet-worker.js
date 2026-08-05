@@ -48,10 +48,10 @@ self.onmessage = async (event) => {
 };
 
 async function boot(width, height) {
-  post("status", { message: "loading python…" });
+  post("status", { stage: "python", message: "loading python…" });
   pyodide = await loadPyodide({ indexURL: "pyodide/" });
 
-  post("status", { message: "loading libraries…" });
+  post("status", { stage: "libraries", message: "loading libraries…" });
   // Pillow and pycryptodome are wanted whichever firmware this is: the renderer
   // draws every screen with Pillow, and pycryptodome is what stands in for
   // pbkdf2_hmac further down, which is the mnemonic to seed path and so is the
@@ -69,7 +69,7 @@ async function boot(width, height) {
     ? ["Pillow", "pycryptodome", "cryptography"]
     : ["Pillow", "pycryptodome"]);
 
-  post("status", { message: "unpacking wallet…" });
+  post("status", { stage: "wallet-zip", message: "unpacking wallet…" });
   // One zip per firmware, each built by build/build-wallet-zip.sh from its own
   // section of UPSTREAM and published with its own pair of hashes.
   const zip = await (await fetch(`wallet-${firmware}.zip`)).arrayBuffer();
@@ -93,7 +93,7 @@ async function boot(width, height) {
   const qrShim = await (await fetch("browser_qr.py")).text();
   pyodide.FS.writeFile("/wallet/browser_qr.py", qrShim);
 
-  post("status", { message: "starting wallet…" });
+  post("status", { stage: "starting", message: "starting wallet…" });
 
   // Frames come back through this callback rather than being polled.
   pyodide.globals.set("js_frame_sink", (bytes) => {

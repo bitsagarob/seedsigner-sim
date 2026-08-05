@@ -700,38 +700,24 @@ const doomHint = document.getElementById("doom-hint");
 const cameraHint = document.getElementById("camera-hint");
 const networkEl = document.getElementById("network");
 
-// One line, two things that can want it, and the live one wins. The notice is
-// static -- this machine has no camera, said before anybody presses anything --
-// and the trouble is the camera channel reporting that frames have stopped. The
-// trouble has to be able to clear itself without taking the notice with it,
-// which one textContent shared by both could not do.
-let cameraNotice = "";
-let cameraTrouble = "";
-function paintCameraHint() {
-  cameraHint.textContent = cameraTrouble || cameraNotice;
+// Each boot stage, once, with the milliseconds the visitor had waited by then.
+// Once, because a stage that somehow repeated would otherwise pull its own
+// average around; the firmware is the label so the two builds can be compared,
+// which is the question the lighter default was chosen to answer.
+const bootStagesSeen = new Set();
+function bootStage(stage) {
+  if (!stage || bootStagesSeen.has(stage)) return;
+  bootStagesSeen.add(stage);
+  track.event("boot", stage, FIRMWARE, Math.round(performance.now()));
 }
 
-// Whether there is a camera at all, answered before the visitor spends a press
-// finding out. Scan is the first tile on the device's home screen and it starts
-// selected, so the very first press on a fresh page is also the one most likely
-// to dead-end: it opens the camera, and if there is none the device shows a bare
-// error screen that says nothing about why. enumerateDevices answers this
-// without prompting for anything -- labels stay empty until permission is
-// given, but the kinds are there to count.
-function noticeWhetherThereIsACamera() {
-  const cannot = "There is no camera here, so Scan on the device will not work. " +
-                 "Everything else will.";
-  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-    cameraNotice = cannot;
-    paintCameraHint();
-    return;
-  }
-  navigator.mediaDevices.enumerateDevices().then((devices) => {
-    if (devices.some((device) => device.kind === "videoinput")) return;
-    cameraNotice = cannot;
-    paintCameraHint();
-  }).catch(() => { /* nothing to say if it will not even tell us */ });
-}
+// The camera line says nothing until the camera is actually wanted. An earlier
+// version checked for a camera on load and warned up front, which put a red
+// line under the device for everybody who has no webcam -- most of whom were
+// never going to scan anything, since scanning is one of the things the device
+// does rather than the point of it. The channel only reports once the firmware
+// has asked for the camera, which is to say once somebody has pressed Scan, and
+// that is when the explanation is worth having.
 
 // The two header panels are popovers: they cover the page rather than pushing
 // it down, so anything they cover is unclickable while they are open, and a
@@ -1163,9 +1149,21 @@ function startWallet() {
       narrate(event.data.message);
     } else if (type === "status") {
       statusEl.textContent = event.data.message;
+      // How far the boot got, and how long it had taken by then.
+      //
+      // A boot that dies is otherwise completely silent here: the only thing
+      // ever recorded was the first screen the wallet drew, so a visit that
+      // never drew one left no trace of how far it had got or what it was
+      // doing. Half the phone visits end that way and nothing could say why.
+      //
+      // performance.now() is milliseconds since this page started loading,
+      // which is the number worth having: it is what the visitor waited, not
+      // what one stage cost. Matomo averages it per action by itself.
+      bootStage(event.data.stage);
     } else if (type === "ready") {
       statusEl.textContent = "";
       statusEl.className = "ready";
+      bootStage("ready");
     } else if (type === "zip-sha256") {
       // The worker's hash of the bytes it was served, which the panel puts
       // beside the published one.
@@ -1184,6 +1182,10 @@ function startWallet() {
     } else if (type === "error") {
       statusEl.textContent = "failed: " + event.data.message;
       statusEl.className = "err";
+      // The message is the label, so the Events report lists the actual
+      // failures by name rather than only counting them.
+      track.event("boot", "failed", event.data.message,
+                  Math.round(performance.now()));
     }
   };
 
@@ -1196,7 +1198,7 @@ function startWallet() {
   // gone quiet is also one that cannot be left.
   CameraChannel.runPage(cameraBuffer, {
     source: cameraSource,
-    onTrouble: (message) => { cameraTrouble = message; paintCameraHint(); },
+    onTrouble: (message) => { cameraHint.textContent = message; },
   });
   const tray = cardBuffer ? CardTray.runPage(cardBuffer, "cardtray") : null;
 
@@ -1243,9 +1245,6 @@ if (!window.crossOriginIsolated) {
       "your own copy of the site, it has to send COOP and COEP on every response.";
   statusEl.className = "err";
 } else {
-  // Before anything is pressed, and only when the page is going to run at all.
-  noticeWhetherThereIsACamera();
-
   // The keyboard, out here rather than inside the wallet: the same eight keys
   // drive DOOM before the unlock and the wallet after it, and pressKey is what
   // knows which of them is holding the device. keyup is only ever any use to

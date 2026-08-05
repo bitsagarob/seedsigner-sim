@@ -57,13 +57,13 @@ bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859  src/web/jsQR.j
 ebdba8ffca304f3637c6633d84a460f1887516a752ca7b8a80cecc7d6c5a4a08  src/web/signet-coordinator.js
 c1c7765eff50f054bfc035afdd25e98198acedf925f81c5e3f372d7de8cf5ed4  src/web/sw.js
 7b4b618d5bf889defaf7fcbdf962c43b9ad3b34ce7c5537d4a1200269ce62127  src/web/ur-decode.js
-b0eaa37f13330852394ac896a4fd2deeaeaba25c2de686ae33b763c3ffb53085  src/web/wallet-camera.js
+84390fe70e248b64dc088bc94436709e4a9c9cc435a4990822939d2f3873045e  src/web/wallet-camera.js
 e832c8795b3fe082f8420509902847ad5ecd31a11334007db8bec2bad97038e8  src/web/wallet-cards.js
 d6361ecad60e76c475597670a4d4691448fff89e4dc0864d7334d7f6a74e616b  src/web/wallet-coordinator.js
-c2b6c3dab126fc5ca5803616ba7e2ec6e58ac41b6d91a7513dd934211cf863d6  src/web/wallet-track.js
+ebee89297750a166d7374a704abc9c3e9ef60403b4514c6e26fa0911862e3523  src/web/wallet-track.js
 5fb474ace6000daad38a40e4919cd5cf55436bbf6b0069cf180d3bbf83093f2c  src/web/wallet-tutorial.js
-fea366e35e08a9b5e5780f392c45442ad56b878ad21d6759bc76cc5503ed6ff1  src/web/wallet-worker.js
-41f2c8795a3e5713d2913fd5aa443210acda9e4638cf0dcbd44c4905b8d3ee44  src/web/wallet.html
+c508f188cb4b587ba646e69c30e1cc6ef127f21ce403c8749b223e35d79f68d3  src/web/wallet-worker.js
+d2286306f4063e881ab5c3402653482ede060720d47dc617150803ff302c6d90  src/web/wallet.html
 
 # The stand-in packages, which build/build-wallet-zip.sh copies out of the working
 # tree and into a wallet zip whole. Every other input to that zip is pinned by a

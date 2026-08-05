@@ -94,8 +94,36 @@
     }
 
     function fail(error) {
-      writeString(sab, hdr, ERR_OFFSET, ERR_MAX, ERR_LEN, (error && error.message) || error);
+      writeString(sab, hdr, ERR_OFFSET, ERR_MAX, ERR_LEN, explain(error));
       shutdown(STATES.FAILED);
+    }
+
+    // getUserMedia's own words are written for developers. "Requested device not
+    // found" is accurate and tells a visitor nothing about what to do about it,
+    // and it is the first thing most of them will ever see go wrong here, since
+    // Scan is the first tile on the device's home screen and starts selected.
+    //
+    // The name picks the sentence rather than the message: the name is a short
+    // list fixed by the spec, the message is browser-specific prose. Anything
+    // not on the list keeps its own message, which is better than a wrong guess.
+    function explain(error) {
+      switch ((error && error.name) || "") {
+        case "NotFoundError":
+        case "OverconstrainedError":
+          return "There is no camera on this device, so scanning will not work. " +
+                 "Everything else on the simulator will.";
+        case "NotAllowedError":
+          return "The camera was refused, so scanning will not work. Everything " +
+                 "else will. Allow it in the address bar and press Scan again.";
+        case "NotReadableError":
+          return "Something else on this machine is holding the camera, so " +
+                 "scanning will not work. Close it and press Scan again.";
+        case "SecurityError":
+          return "A browser only hands a camera to a secure page, and this one " +
+                 "is not, so scanning will not work here.";
+        default:
+          return (error && error.message) || String(error) || "The camera would not start.";
+      }
     }
 
     function shutdown(state) {

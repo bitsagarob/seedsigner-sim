@@ -83,9 +83,24 @@
   }
 
   scope.Track = {
-    /** One click, one line. Category, action, and what was clicked. */
-    event: function (category, action, name) {
-      push(["trackEvent", category, action, name === undefined ? "" : String(name)]);
+    /**
+     * One click, one line. Category, action, what was clicked, and optionally a
+     * number.
+     *
+     * The number is Matomo's own event value, which it already averages and
+     * takes the min and max of per action, in the Events report, with nothing to
+     * set up and nobody needing to be logged in to create it first. That is why
+     * the boot timings below are carried here rather than in an invented scheme:
+     * the report that answers "how long does this take, and for whom" already
+     * exists and was simply never given a number to work with.
+     */
+    event: function (category, action, name, value) {
+      var command = ["trackEvent", category, action,
+                     name === undefined ? "" : String(name)];
+      // Omitted rather than sent as zero when there is nothing to measure: a
+      // zero is a data point and would drag every average it landed in.
+      if (typeof value === "number" && isFinite(value)) command.push(value);
+      push(command);
     },
 
     /**
@@ -120,6 +135,13 @@
   push(["setTrackerUrl", TRACKER_URL]);
   push(["setSiteId", SITE_ID]);
   push(["enableLinkTracking"]);
+  // A visit that loads the page and never gets the wallet up sends exactly one
+  // request, and Matomo can only date a visit from the requests it receives, so
+  // every one of those was recorded as lasting zero seconds. That is precisely
+  // the visit worth understanding -- somebody who waited and left is a different
+  // problem from somebody who bounced -- and the difference was invisible. The
+  // heartbeat is Matomo's own answer to it and costs one line.
+  push(["enableHeartBeatTimer", 15]);
   // The real page, once, before anything below starts overwriting the URL with
   // screens that are not pages.
   push(["trackPageView"]);
