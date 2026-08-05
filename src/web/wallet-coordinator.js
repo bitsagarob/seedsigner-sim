@@ -70,6 +70,7 @@
   // here now, so there is no extra keypress to ask for and nowhere the path
   // steers a visitor away from what the device wanted to do. Static is still
   // read, it just no longer has to be named.
+  var SEED_PATH = "Tools → New seed";
   var EXPORT_PATH = "Seeds → your seed → Export Xpub → Single sig "
                   + "→ Native Segwit";
 
@@ -77,8 +78,8 @@
 
   // What the one control says, in both of its states. It is a disclosure
   // button, so the label is the action and aria-expanded carries the state.
-  var OPEN_LABEL = "Open the wallet";
-  var SHUT_LABEL = "Close the wallet";
+  var OPEN_LABEL = "Open wallet";
+  var SHUT_LABEL = "Close wallet";
 
   // ---------------------------------------------------------------- the panel
 
@@ -158,8 +159,20 @@
 
     ".wal-say{margin:1rem 0 0}",
     ".wal-say:empty{display:none}",
-    ".wal-path{margin:.7rem 0 0;padding:.55rem .75rem;border-left:2px solid #f7931a;",
-    "background:#16181c;color:#d7dbe0;overflow-wrap:anywhere}",
+    ".wal-path{display:block;margin:.35rem 0 0;padding:.55rem .75rem;",
+    "border-left:2px solid #f7931a;background:#16181c;color:#d7dbe0;",
+    "overflow-wrap:anywhere}",
+    // The numbers are the point, so they are the one thing in the list that is
+    // not grey: this is a sequence, and it used to be three paragraphs that had
+    // to be read to find that out.
+    // How to connect, as a numbered list. Not .wal-steps, which is the send's
+    // own progress list further down and owns that name; and not a flex column,
+    // which was the first attempt and why the numbers did not appear at all --
+    // flex items are not list items, and ::marker only exists on a list item.
+    ".wal-howto{margin:.9rem 0 0;padding:0 0 0 1.5rem;list-style:decimal}",
+    ".wal-howto li{margin:0 0 .85rem}",
+    ".wal-howto li:last-child{margin-bottom:0}",
+    ".wal-howto li::marker{color:#f7931a;font-weight:600}",
     ".wal-bad{margin:1rem 0 0;border:1px solid #7f1d1d;background:#1b0f10;color:#ef4444;",
     "border-radius:6px;padding:.5rem .7rem;overflow-wrap:anywhere}",
     ".wal-bad:empty{display:none}",
@@ -1176,14 +1189,27 @@
   // decided to try it; what they need is the path and the reassurance that
   // there is nothing to press afterwards. The rest of the argument is on the
   // page around it and behind the i, where somebody who wants it can find it.
+  // Numbered, because it is a sequence and was written as prose; and starting
+  // with the seed, because a device that has just booted has none and every
+  // visit begins there. The last step is the one that used to be a sentence on
+  // its own -- "leave the QR up, this panel reads it" reads as a riddle with
+  // nothing before it, and as an instruction once it is step three of three.
   Wallet.prototype.renderIdle = function () {
-    this.body.appendChild(element("p", "wal-say",
-      "Export the account's public key on the device:"));
-    this.body.appendChild(element("p", "wal-path", EXPORT_PATH));
-    this.body.appendChild(element("p", "wal-say",
-      "Leave the QR on the screen. This panel reads it off by itself."));
+    var steps = element("ol", "wal-howto");
+    steps.appendChild(step("Make a seed on the device.", SEED_PATH));
+    steps.appendChild(step("Export its public key.", EXPORT_PATH));
+    steps.appendChild(step("Leave that QR on the device's screen. This panel "
+                           + "reads it off the screen by itself.", null));
+    this.body.appendChild(steps);
     this.sayInto(this.body);
   };
+
+  function step(text, path) {
+    var item = element("li");
+    item.appendChild(document.createTextNode(text));
+    if (path) item.appendChild(element("span", "wal-path", path));
+    return item;
+  }
 
   Wallet.prototype.renderConnecting = function () {
     this.body.appendChild(element("p", "wal-say", "Connecting to the device."));
