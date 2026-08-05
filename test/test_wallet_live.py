@@ -291,7 +291,7 @@ def press(page, *keys, gap=280):
     halves it is talking to.
     """
     page.evaluate("() => { const a = document.activeElement;"
-                  " if (a && a.closest && a.closest('#wallet, #wallet-strip')) a.blur(); }")
+                  " if (a && a.closest && a.closest('#wallet, #wallet-button')) a.blur(); }")
     for key in keys:
         page.keyboard.press(key)
         page.wait_for_timeout(gap)
@@ -974,7 +974,7 @@ def main(argv) -> int:
             # ---------------------------------------------------- 1. the seed
             screen_is(log, "MainMenuScreen", 300)
             check("the simulator boots with the wallet drawer on the page",
-                  page.locator("#wallet-strip").count() == 1)
+                  page.locator("#wallet-button").count() == 1)
             shot(page, "01-booted")
 
             if args.new_seed:
@@ -987,7 +987,7 @@ def main(argv) -> int:
             # The drawer is opened before the export, so the panel is already
             # watching the screen when the QR lands on it. Nothing is pressed in
             # the panel to make it connect, which is the claim being tested.
-            page.locator("#wallet-strip").click()
+            page.locator("#wallet-button").click()
             check("opening the drawer puts the panel in its unconnected state",
                   "Export Xpub" in panel(page, ".wal-path"), panel(page, ".wal-path"))
 

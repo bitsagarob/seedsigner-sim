@@ -46,10 +46,6 @@
   #stage-device {
     position: relative; width: 100%;
     display: flex; flex-direction: column; align-items: center; gap: .5rem;
-    /* A band for the network label to sit in. On a phone the shell fills the
-       width and the corner it leaves empty on a desktop is barely a corner, so
-       the label is given its own line rather than dropped on top of the art. */
-    padding-top: 1.15em;
   }
   #tutorial-slot { width: 100%; min-width: 0; }
   /* Closed, and taking no room, until the drawer is pulled out. */
@@ -92,21 +88,20 @@
       background: #0b0c0e;
     }
   }
-  /* Room for the collapsed wallet, which is fixed to the edge of the viewport.
-     Reserved rather than overlapped: at just over the split the page is as wide
-     as the device is, so a strip floating on top of it floats on top of the
-     device's own keys. */
-  @media (min-width: 62rem) { body.walleted { padding-right: 3.4rem; } }
-  @media (max-width: 61.99rem) { body.walleted { padding-bottom: 4.5rem; } }
   /* The device on its own is the device on its own. */
-  body.solo .wal, body.solo .wal-strip { display: none; }
+  body.solo .wal, body.solo .wal-open { display: none; }
   /* Which network the wallet is on: a fact worth having up, not a sentence
      worth reading, so it is one small word in the corner rather than a line of
      its own under the device. Mainnet is the exception and shouts, below. */
-  #network-line {
-    position: absolute; top: 0; right: 0; z-index: 4;
-    display: flex; align-items: center; gap: .3rem;
+  /* In the flow, directly under the device, and no taller than the line it
+     holds. The band the two of these used to share was reserved above the
+     device with padding, so moving it costs nothing: the padding goes. */
+  #device-band {
+    position: relative; z-index: 4; width: 100%;
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: center; gap: .5rem; min-height: 1.15em;
   }
+  #network-line { display: flex; align-items: center; gap: .3rem; }
   #network {
     margin: 0; font-size: .68rem; letter-spacing: .06em;
     text-transform: uppercase; color: #656c76;
@@ -125,8 +120,14 @@
   /* Out of the flow and pinned to the right, or opening it would shove the
      device sideways, and anchored right rather than centred because it hangs
      off a label already in the corner. */
+  /* Anchored to the i rather than to the band, and centred under it. It used
+     to hang off the right edge because the label it belongs to was pinned
+     there; the label is in the middle now, and a panel opening off to one side
+     of it would point at nothing. */
+  #network-note { position: relative; }
   #network-note > div {
-    position: absolute; top: 1.5rem; right: 0; z-index: 11;
+    position: absolute; top: 1.5rem; left: 50%; transform: translateX(-50%);
+    z-index: 11;
     box-sizing: border-box; width: min(26rem, calc(100vw - 2rem));
     background: #12151a; border: 1px solid #2a2f36; border-radius: 10px;
     padding: .7rem .9rem; font-size: 1.15em; line-height: 1.55;
@@ -149,15 +150,14 @@
      the flow costs nothing either way: it says "loading python" over the band
      and the device has not moved because it was never below anything. */
   #status {
-    position: absolute; top: 0; left: 0; right: 0; z-index: 4; margin: 0;
-    /* Centred over the device, the way it was when it had a line of its own.
-       Room left at the right for the network label, which shares this band and
-       is anchored to that end of it. Inert, so a word about loading can never
-       take a press meant for the shell underneath it. */
-    padding: 0 6rem; text-align: center; pointer-events: none;
+    margin: 0; text-align: center; pointer-events: none;
     font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
     color: #656c76;
   }
+  /* An empty one is not a gap. The band is a flex row, so a p with nothing in
+     it would still claim its share of the gap and push the network label off
+     centre for the whole of a visit. */
+  #status:empty { display: none; }
   /* The one line that overrides the device on purpose. On hardware the game is
      camouflage and the sequence is a secret; this page is titled "wallet
      simulator" and is linked as "open the simulator", so a genuinely hidden
@@ -203,7 +203,7 @@
   #about li { margin: .35rem 0; }
   #status.ready { color: #22c55e; }
   #status.err {
-    position: static; max-width: 70ch; color: #ef4444;
+    max-width: 70ch; color: #ef4444;
     white-space: pre-wrap; text-transform: none; letter-spacing: normal;
     font-size: .9em; text-align: center;
   }
@@ -254,6 +254,15 @@
     color: #f7931a; border-color: #f7931a; background: #16181c; cursor: default;
   }
   #firmware-switch button:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
+  /* Stacked on a phone. Three names and a label do not fit one line at 360px,
+     so they wrapped: two buttons on one row and the third alone under them,
+     which reads as a group of two and an afterthought rather than as three
+     choices. A column is three choices. Sized to the widest of them so the
+     edges line up, rather than each button being as wide as its own word. */
+  @media (max-width: 30rem) {
+    #firmware-switch { flex-direction: column; gap: .4rem; }
+    #firmware-switch button { width: 11rem; padding: .35rem .6rem; }
+  }
   /* The build half of the panel: same voice and same column as the prose above
      it, set off only by its headings, because it is the end of one argument
      rather than a second panel that happens to live here. */
@@ -330,15 +339,29 @@
      offers for nothing but a video, so it would work in the one place it is
      least needed. */
   #fullscreen {
-    display: none; font: inherit; font-size: .9em; color: #8b939e;
+    display: none; align-items: center; gap: .45rem;
+    font: inherit; font-size: .9em; color: #8b939e;
     background: #1d2026; border: 1px solid #2a2e35; border-radius: 5px;
-    padding: .25rem .7rem; cursor: pointer;
+    padding: .35rem .8rem; cursor: pointer;
+  }
+  /* Drawn in strokes that inherit the button's colour, so the icon changes with
+     the label rather than needing a second rule per state. */
+  #fullscreen svg {
+    width: 1.05em; height: 1.05em; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* Turned once it is on, so the icon says which way round the device now is
+     and the control reads as the way back rather than the way in again. */
+  #fullscreen[aria-pressed=true] svg { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: no-preference) {
+    #fullscreen svg { transition: transform .18s ease; }
   }
   #fullscreen:hover { color: #d7dbe0; border-color: #3a3f47; }
   #fullscreen[aria-pressed=true] { color: #f7931a; border-color: #f7931a; background: #16181c; }
   #fullscreen:focus-visible { outline: 2px solid #f7931a; outline-offset: 2px; }
   @media (max-width: 46rem), (max-height: 30rem) {
-    #fullscreen { display: inline-block; }
+    #fullscreen { display: inline-flex; }
   }
   body.solo { overflow: hidden; }
   /* Filling the screen outranks pinning the device to the top of a scrolling
@@ -524,9 +547,18 @@
        watch the device do it -- needed a scroll each way. -->
   <div id="stage">
     <div id="stage-device">
-      <p id="status">starting…</p>
       <div id="device"></div>
       <canvas id="screen" width="320" height="240"></canvas>
+      <!-- One band under the device for the two things that are about the
+           device rather than on it: what it is doing while it boots, and which
+           network it is set to. Under it rather than over it, because the band
+           above was read as belonging to the warning above that; centred,
+           because the device is; and one band rather than two, because between
+           them they are never more than one line. The network label used to be
+           alone in the corner up there, where it was a word nobody connected
+           to anything. -->
+      <div id="device-band">
+        <p id="status">starting…</p>
       <!-- The network, and the one paragraph that is about the network, behind an
            i in front of it. The paragraph used to sit in the footer, where it
            explained the label at the top of the page from the bottom of it. -->
@@ -540,6 +572,7 @@
         </details>
         <p id="network"></p>
       </div>
+      </div>
       <!-- What the side buttons are for while the device is playing DOOM, and
            why the wallet is not up. Filled in by the boot below and emptied
            again the moment the wallet has the device. -->
@@ -550,7 +583,19 @@
       <p id="camera-hint"></p>
       <!-- Only offered where it is any use: on a phone, where the page around the
            device is what is making the device small. -->
-      <button type="button" id="fullscreen" aria-pressed="false">Fill the screen</button>
+      <!-- The icon is a phone with a turn around it, because that is what the
+           control does on a phone held upright: the shell is laid along the
+           viewport's long side, so it rotates and the page goes away. Inline,
+           since the page's own CSP allows nothing external, and aria-hidden
+           because the label beside it already says it. -->
+      <button type="button" id="fullscreen" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="8.5" y="2.5" width="7" height="13" rx="1.6"></rect>
+          <path d="M4.6 12.4a7.6 7.6 0 0 0 7 9.1"></path>
+          <path d="M4.2 16.3l.4-3.9 3.7 1.2"></path>
+        </svg>
+        <span id="fullscreen-label">Fill the screen</span>
+      </button>
     </div>
     <!-- Either one button, or, once it has been pressed, the tutorial itself.
          Nothing else is added to the page at rest. -->
@@ -560,6 +605,11 @@
     <div id="wallet-slot"></div>
   </div>
   <footer>
+  <!-- What opens the wallet. First in the footer, so it is the next thing after
+       the device rather than something found by accident at the edge of the
+       screen. Filled in by wallet-coordinator.js, and left empty on a page that
+       never starts one. -->
+  <div id="wallet-open-slot"></div>
   <div class="running-row">
     <div id="firmware-switch" role="group" aria-label="Firmware">
       <span class="label">Firmware</span>
@@ -992,6 +1042,7 @@ mountDevice(W, H);
 // which is the whole of what makes its keys thumb sized. The same control, or
 // Escape, comes back out.
 const fullscreenButton = document.getElementById("fullscreen");
+const fullscreenLabel = document.getElementById("fullscreen-label");
 function setSolo(on) {
   // Only when it moves. Escape calls this on every press, solo or not, and a
   // page that counted those would report the device being put away by people
@@ -1001,7 +1052,8 @@ function setSolo(on) {
   }
   document.body.classList.toggle("solo", on);
   fullscreenButton.setAttribute("aria-pressed", String(on));
-  fullscreenButton.textContent = on ? "Back to the page" : "Fill the screen";
+  // The label only, so the icon beside it survives being relabelled.
+  fullscreenLabel.textContent = on ? "Back to the page" : "Fill the screen";
 }
 fullscreenButton.addEventListener("click", () => {
   setSolo(!document.body.classList.contains("solo"));
@@ -1264,7 +1316,7 @@ if (!window.crossOriginIsolated) {
     var control = event.target.closest
       && event.target.closest("#wallet input, #wallet textarea, #wallet select,"
                               + " #wallet button, #wallet [contenteditable],"
-                              + " #wallet-strip");
+                              + " #wallet-button");
     if (control) return;
     event.preventDefault();
     pressKey(channel, event.type === "keydown");

@@ -77,6 +77,11 @@
 
   var WAITING = "Waiting for Bitsaga Signet to put it in a block, about thirty seconds.";
 
+  // What the one control says, in both of its states. It is a disclosure
+  // button, so the label is the action and aria-expanded carries the state.
+  var OPEN_LABEL = "Open the simulator wallet";
+  var SHUT_LABEL = "Close the simulator wallet";
+
   // ---------------------------------------------------------------- the panel
 
   // The page's own idiom, and nothing new: the tutorial panel's fill, border and
@@ -85,27 +90,29 @@
   // BlueWallet's rather than Sparrow's: one big number, a short list, two
   // controls, and air around all of it.
   var CSS = [
-    // The collapsed strip. Fixed to the edge of the viewport rather than in the
-    // flow, so the page at rest is exactly the page that was there before the
-    // wallet existed, and the body padding below keeps it off the device.
-    ".wal-strip{position:fixed;z-index:40;right:0;top:50%;transform:translateY(-50%);",
-    "display:flex;align-items:center;gap:.6rem;writing-mode:vertical-rl;",
-    "font:inherit;font-size:.82rem;color:#8b939e;background:#12151a;",
-    "border:1px solid #2a2f36;border-right:none;border-radius:10px 0 0 10px;",
-    "padding:1rem .45rem;cursor:pointer}",
-    ".wal-strip:hover{color:#d7dbe0;border-color:#3a3f47}",
-    ".wal-strip:focus-visible{outline:2px solid #f7931a;outline-offset:2px}",
-    ".wal-strip b{font-weight:600;color:#d7dbe0}",
-    // A flex row in vertical writing runs down the strip, which is what puts
-    // the state under the name on a wide screen and beside it on a narrow one,
-    // out of one rule rather than two.
-    ".wal-strip .wal-line{display:flex;align-items:center;gap:.55rem}",
-    ".wal-strip .wal-dot{writing-mode:horizontal-tb;width:.45rem;height:.45rem;",
+    // The control that opens it, in the flow under the device with the rest of
+    // the page's controls. It used to be a strip fixed to the right edge of the
+    // viewport, which left the page at rest exactly as it had been -- and which
+    // nobody pressed, because a vertical label pinned to the side of a screen
+    // does not read as the way into the only thing here that can hold a
+    // balance. Orange, because it is the one action on this page worth taking;
+    // the firmware row under it is grey, and is a preference rather than an act.
+    ".wal-open{display:inline-flex;align-items:center;gap:.55rem;font:inherit;",
+    "font-size:.9rem;color:#f7931a;background:#16181c;border:1px solid #f7931a;",
+    "border-radius:8px;padding:.55rem 1.1rem;cursor:pointer}",
+    ".wal-open:hover{background:#1c2026}",
+    ".wal-open:focus-visible{outline:2px solid #f7931a;outline-offset:2px}",
+    ".wal-open b{font-weight:600}",
+    ".wal-open .wal-line{display:flex;align-items:center;gap:.55rem}",
+    ".wal-open .wal-state{color:#7c848f;font-size:.85em}",
+    ".wal-open .wal-dot{width:.45rem;height:.45rem;",
     "flex:none;border-radius:50%;background:#3a4048}",
-    ".wal-strip[data-on=yes] .wal-dot{background:#f7931a}",
-    // Collapsed is what the strip is for. Open, the panel's own Close is the
-    // way back, and two controls for one drawer is one too many.
-    "body.wallet-open .wal-strip{display:none}",
+    ".wal-open[data-on=yes] .wal-dot{background:#f7931a}",
+    // It stays where it is when the drawer opens, and closes it again. The
+    // strip was hidden while open, which cost nothing because it floated over
+    // the page; a button in the flow that vanished would take the row under it
+    // up the page every time the drawer moved. The panel's own Close stays,
+    // being the one that sits next to what it closes.
 
     // The panel itself, in the column the tutorial panel would have had.
     ".wal{width:min(46rem,100%);box-sizing:border-box;background:#12151a;",
@@ -204,18 +211,12 @@
     ".wal[data-anim=in]{transform:translateX(2rem);opacity:0}",
     ".wal[data-anim=out]{transform:translateX(100%);opacity:0}",
 
-    // Below the split, the strip is a bottom sheet handle across the foot of
-    // the screen and the panel comes up rather than in.
+    // Below the split the panel comes up rather than in. The button needs
+    // nothing of its own here: it is one line in a centred column either way.
     "@media (max-width:61.99rem){",
-    ".wal-strip{top:auto;bottom:0;left:0;right:0;transform:none;",
-    "writing-mode:horizontal-tb;flex-direction:column;gap:.3rem;",
-    "border:1px solid #2a2f36;border-bottom:none;border-radius:12px 12px 0 0;",
-    "padding:.5rem .8rem .7rem}",
-    ".wal-strip .wal-handle{width:2.5rem;height:.25rem;border-radius:999px;background:#3a4048}",
     ".wal[data-anim=in]{transform:translateY(2rem)}",
     ".wal[data-anim=out]{transform:translateY(100%)}",
     "}",
-    "@media (min-width:62rem){.wal-strip .wal-handle{display:none}}",
 
     "@media (max-width:30rem){",
     ".wal{padding:.9rem .85rem 1.1rem}",
@@ -368,20 +369,26 @@
     style.textContent = CSS;
     document.head.appendChild(style);
 
-    this.strip = element("button", "wal-strip");
-    this.strip.type = "button";
-    this.strip.id = "wallet-strip";
-    this.strip.setAttribute("aria-expanded", "false");
-    this.strip.setAttribute("aria-controls", "wallet");
-    this.strip.appendChild(element("div", "wal-handle"));
+    this.opener = element("button", "wal-open");
+    this.opener.type = "button";
+    this.opener.id = "wallet-button";
+    this.opener.setAttribute("aria-expanded", "false");
+    this.opener.setAttribute("aria-controls", "wallet");
     var line = element("div", "wal-line");
     line.appendChild(element("span", "wal-dot"));
-    line.appendChild(element("b", null, "Simulator wallet"));
-    this.stripState = element("span", null, "Not connected");
-    line.appendChild(this.stripState);
-    this.strip.appendChild(line);
-    this.strip.addEventListener("click", function () { self.toggle(); });
-    document.body.appendChild(this.strip);
+    // The label says what pressing it does, not what the thing behind it is
+    // called. "Simulator wallet" beside a dot and a state reads as a status
+    // chip, and a status chip is exactly what nobody pressed.
+    this.openerLabel = element("b", null, OPEN_LABEL);
+    line.appendChild(this.openerLabel);
+    this.openerState = element("span", "wal-state", "Not connected");
+    line.appendChild(this.openerState);
+    this.opener.appendChild(line);
+    this.opener.addEventListener("click", function () { self.toggle(); });
+    // Into the footer's own slot when the page offers one, which puts it under
+    // the device beside the firmware row and the card tray. Falling back to the
+    // body keeps this module usable on a page that has made no room for it.
+    (document.getElementById("wallet-open-slot") || document.body).appendChild(this.opener);
 
     this.root = element("section", "wal");
     this.root.id = "wallet";
@@ -416,7 +423,6 @@
     this.canvas.hidden = true;
     this.painter = this.canvas.getContext("2d", { willReadFrequently: true });
 
-    document.body.classList.add("walleted");
   };
 
   // ------------------------------------------------------------ open and shut
@@ -426,7 +432,8 @@
     var open = want === undefined ? !this.open : want;
     if (open === this.open) return;
     this.open = open;
-    this.strip.setAttribute("aria-expanded", String(open));
+    this.opener.setAttribute("aria-expanded", String(open));
+    this.openerLabel.textContent = open ? SHUT_LABEL : OPEN_LABEL;
     track(open ? "open" : "close", this.stage);
 
     var still = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -451,7 +458,7 @@
         // After the strip is back on the page and not before: focus cannot land
         // on something that is still display:none, and a keyboard left on the
         // body has nowhere obvious to go next.
-        self.strip.focus();
+        self.opener.focus();
       };
       if (still) hide(); else setTimeout(hide, 220);
       this.stopReading();
@@ -1115,10 +1122,10 @@
   Wallet.prototype.say = function (text) {
     this.progress = text;
     if (this.sayText) this.sayText.textContent = text;
-    this.stripState.textContent = this.stripLine();
+    this.openerState.textContent = this.openerLine();
   };
 
-  Wallet.prototype.stripLine = function () {
+  Wallet.prototype.openerLine = function () {
     if (this.stage === "connecting") return "Connecting";
     if (this.stage !== "ready") return "Not connected";
     var balance = this.balance();
@@ -1129,8 +1136,8 @@
     if (!this.open) return;
     var self = this;
     this.body.textContent = "";
-    this.strip.dataset.on = this.stage === "ready" ? "yes" : "no";
-    this.stripState.textContent = this.stripLine();
+    this.opener.dataset.on = this.stage === "ready" ? "yes" : "no";
+    this.openerState.textContent = this.openerLine();
 
     if (this.stage === "idle") this.renderIdle();
     else if (this.stage === "connecting") this.renderConnecting();
