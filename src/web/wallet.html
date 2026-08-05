@@ -89,7 +89,7 @@
     }
   }
   /* The device on its own is the device on its own. */
-  body.solo .wal, body.solo .wal-open { display: none; }
+  body.solo .wal, body.solo .wal-open, body.solo #getone { display: none; }
   /* Which network the wallet is on: a fact worth having up, not a sentence
      worth reading, so it is one small word in the corner rather than a line of
      its own under the device. Mainnet is the exception and shouts, below. */
@@ -317,6 +317,44 @@
      its content and takes the page sideways with it on a narrow phone. The
      cards already know how to shrink; they just have to be told to. */
   #cardtray { max-width: 100%; }
+  /* The one thing on this page that asks for anything, so it is last, after
+     everything the page has to say for itself, and it is one line and one
+     button.
+
+     Filled where every other control here is outlined, and that is the whole of
+     how it outranks them: the same size, the same voice and the same orange as
+     the button that opens the wallet, with one more step of ink. Nothing is
+     bigger, nothing moves, nothing is capitalised. The rule the page keeps is
+     one filled thing on it, and this is the one.
+
+     Hidden in the markup and shown by the script at the foot of this file, on
+     bitsaga.be alone. */
+  #getone {
+    display: flex; flex-direction: column; align-items: center; gap: .55rem;
+    width: 100%; max-width: min(46rem, 100%);
+    border-top: 1px solid #1c2026; padding-top: 1.1rem; margin-top: .2rem;
+  }
+  /* The UA's own display:none for [hidden] loses to the rule above it, so the
+     hidden state has to be said here or the button is on every host. */
+  #getone[hidden] { display: none; }
+  /* Balanced, because on a phone this is two lines and the second was one word
+     hanging under the first. Ignored by a browser that has never heard of it,
+     which costs that browser the orphan and nothing else. */
+  #getone p {
+    margin: 0; color: #7c848f; font-size: .9em; text-align: center;
+    text-wrap: balance;
+  }
+  #getone a {
+    display: inline-flex; align-items: center; justify-content: center;
+    box-sizing: border-box; min-height: 2.6rem;
+    font: inherit; font-size: .95rem; font-weight: 600;
+    color: #0b0c0e; background: #f7931a; border: 1px solid #f7931a;
+    border-radius: 8px; padding: .5rem 1.4rem; text-decoration: none;
+  }
+  #getone a:hover { background: #ffa733; border-color: #ffa733; }
+  /* Offset by three, not two: the ring is orange on an orange button, so it
+     needs the dark page between the two to be seen at all. */
+  #getone a:focus-visible { outline: 2px solid #f7931a; outline-offset: 3px; }
   /* The device, on its own, filling the screen.
 
      The shell is landscape and about twice as wide as it is tall. Fitted to a
@@ -397,6 +435,9 @@
     /* Two columns of a 64-character hash do not fit a phone. */
     #build dl { grid-template-columns: 1fr; gap: 0; }
     #build dd { margin: 0 0 .5rem; }
+    /* A thumb's width rather than a word's, at the end of a page somebody has
+       been scrolling. Bounded, so it is a button and not a banner. */
+    #getone a { width: 100%; max-width: 18rem; }
   }
 </style>
 </head>
@@ -616,6 +657,17 @@
     </div>
   </div>
   <div id="cardtray"></div>
+  <!-- Last, and the only thing here asking for anything: one line saying what
+       the page has been, and one button to the hardware it has been imitating.
+
+       It ships hidden and the script below shows it on bitsaga.be, so what is
+       published and what is served are the same bytes, and a clone of this
+       repository is not left advertising a shop its host does not run. -->
+  <div id="getone" hidden>
+    <p>Everything above is a simulation of a device that exists.</p>
+    <a id="getone-link" href="https://shop.bitsaga.be/product/seedsigner/"
+       target="_blank" rel="noopener">Get a real device</a>
+  </div>
   </footer>
 
 <script src="seedsigner-device.js"></script>
@@ -749,6 +801,17 @@ const statusEl = document.getElementById("status");
 const doomHint = document.getElementById("doom-hint");
 const cameraHint = document.getElementById("camera-hint");
 const networkEl = document.getElementById("network");
+
+// The shop link in the footer, on the one host that has a shop behind it.
+// Matomo counts an outbound click by itself, having link tracking on; the event
+// beside it carries which firmware was running when it was pressed, which is
+// the part no outlink report can say.
+if (/(^|\.)bitsaga\.be$/i.test(location.hostname)) {
+  document.getElementById("getone").hidden = false;
+  document.getElementById("getone-link").addEventListener("click", () => {
+    track.event("shop", "get-a-real-device", FIRMWARE);
+  });
+}
 
 // Each boot stage, once, with the milliseconds the visitor had waited by then.
 // Once, because a stage that somehow repeated would otherwise pull its own
