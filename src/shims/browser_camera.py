@@ -129,6 +129,81 @@ def _stop_video_stream_mode(self):
     _js.stop()
 
 
+class _BrowserSingleFrame:
+    """
+    Stands in for the PiCamera object single-frame mode holds.
+
+    Nothing is read through it, the same as the video stream above: the frame
+    comes over the SharedArrayBuffer. But Camera uses `_picamera` to know
+    whether the mode is open, and capture_frame's own guard reads it, so it has
+    to hold something and then become None.
+    """
+
+    def close(self):
+        pass
+
+
+def _start_single_frame_mode(self, resolution=(720, 480)):
+    """
+    Open the camera for a still, rather than for a stream.
+
+    This is the other half of the hardware camera and it was missing, which is
+    why "new seed from a photo" died on `No module named 'picamera'`: stock
+    reaches for the single-frame API there and for the video stream nowhere
+    near it, so patching only the stream left the whole flow on the real
+    picamera import. The fork does not use this API at all, which is why it
+    went unnoticed for as long as the fork was the firmware people booted.
+
+    `resolution` is the caller's preference for a sensor this process does not
+    own, exactly as in the stream case: the page negotiates its own with
+    getUserMedia and publishes at a fixed size.
+    """
+    if self._video_stream is not None:
+        self.stop_video_stream_mode()
+    if self._picamera is not None:
+        self.stop_single_frame_mode()
+
+    error = _js.start(_START_WAIT_MS)
+    if error:
+        raise CameraConnectionError(str(error))
+
+    self._picamera = _BrowserSingleFrame()
+
+
+def _capture_frame(self):
+    """
+    One frame, as a PIL image, from the stream the page is already publishing.
+
+    The real one sets the exposure and white balance manually, takes a JPEG and
+    rotates it by 90 degrees plus the user's setting. None of that applies: the
+    browser owns the exposure, there is no JPEG in the middle, and a
+    getUserMedia stream arrives upright, which is the same reason
+    read_video_stream does not rotate either.
+
+    It is the published preview frame, so it is the preview's size rather than
+    the resolution asked for. What this image is used for is entropy -- it is
+    hashed, and the sensor noise in it is the point -- and a quarter-megapixel
+    of real camera output has far more of that than a seed needs. It is also
+    what the visitor is shown, at a size the screen would have scaled it to
+    anyway.
+    """
+    if self._picamera is None:
+        raise Exception("Must call start_single_frame_mode first.")
+
+    frame = _js.frame(_FRAME_WAIT_MS)
+    if frame is None:
+        raise CameraConnectionError("the camera did not deliver a frame")
+
+    return Image.frombytes("RGB", (frame.w, frame.h), _to_bytes(frame.bytes))
+
+
+def _stop_single_frame_mode(self):
+    if self._picamera is not None:
+        self._picamera.close()
+        self._picamera = None
+    _js.stop()
+
+
 def _extract_qr_data(image, is_binary: bool = False):
     """
     Report the payload the page has decoded, or None.
@@ -187,6 +262,13 @@ def install(js_camera):
     Camera.start_video_stream_mode = _start_video_stream_mode
     Camera.read_video_stream = _read_video_stream
     Camera.stop_video_stream_mode = _stop_video_stream_mode
+
+    # The still half. Stock's image-entropy flow and its QR brightness setting
+    # are the callers; the fork has neither, so this was missing for as long as
+    # the fork was what booted.
+    Camera.start_single_frame_mode = _start_single_frame_mode
+    Camera.capture_frame = _capture_frame
+    Camera.stop_single_frame_mode = _stop_single_frame_mode
 
     DecodeQR.extract_qr_data = staticmethod(_extract_qr_data)
 

@@ -42,7 +42,7 @@
 #
 #     curl -sL https://registry.npmjs.org/jsqr/-/jsqr-1.4.0.tgz | tar xzO package/dist/jsQR.js | sha256sum
 
-175204d90723138f936e280500e8498ecb4cb17e17e4661e0a3e3af3823c8ec5  src/shims/browser_camera.py
+a7b7fa32b1d3da4ac565bc691ebcae2c7bf47c3d239df6e2709ad079527bf565  src/shims/browser_camera.py
 09f9ae5c73128719261d757ff5184e79912158ceb21dc650e11243da093644f3  src/shims/browser_display.py
 2e1b0500e002f33684e9187a9c3d2752f526ce6e78f0e02feea238e92c0dee5b  src/shims/browser_qr.py
 0243ccf633097906b763839cd4b2d9f92fccd042bac1fd11ee7be60f31e78687  src/web/apple-touch-icon.png
@@ -59,7 +59,7 @@ cea1befacf98de3a62e2e84e64f37bb8df5c795ac39bc806a82372dfdd6e25ab  src/web/sw.js
 7b4b618d5bf889defaf7fcbdf962c43b9ad3b34ce7c5537d4a1200269ce62127  src/web/ur-decode.js
 84390fe70e248b64dc088bc94436709e4a9c9cc435a4990822939d2f3873045e  src/web/wallet-camera.js
 e832c8795b3fe082f8420509902847ad5ecd31a11334007db8bec2bad97038e8  src/web/wallet-cards.js
-a712d3f77be163da91211bab7e0c1af297508be602ff22073cca46d2fb23e7bd  src/web/wallet-coordinator.js
+e508375a9e50ebce48d3c9b5cbe1721d86deca9bddc4176101fcea6d1dd52c48  src/web/wallet-coordinator.js
 ebee89297750a166d7374a704abc9c3e9ef60403b4514c6e26fa0911862e3523  src/web/wallet-track.js
 5fb474ace6000daad38a40e4919cd5cf55436bbf6b0069cf180d3bbf83093f2c  src/web/wallet-tutorial.js
 7a77c7f20cac612a94b8ef8fa280d2657e8c7f313384291c231c02121464b968  src/web/wallet-worker.js

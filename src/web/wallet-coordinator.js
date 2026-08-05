@@ -57,14 +57,12 @@
   // is what the device's decoder was watched reading.
   var FRAME_MS = 550;
 
-  var NOT_REAL = "These are not real bitcoin. They exist only on our test "
+  var NOT_REAL = "These are not real bitcoin. They exist only on that test "
                + "network, cannot be sold or sent to anyone, and are worth nothing.";
 
   // The one sentence that has to be true whatever else the panel is showing.
-  var NOT_A_WALLET = "Not a real wallet. It is a demonstration beside a "
-                   + "simulator, it holds no keys, it spends only Bitsaga "
-                   + "Signet test coins, and it forgets everything when you "
-                   + "close the tab.";
+  var NOT_A_WALLET = "Not a real wallet. Bitsaga Signet test coins only, no "
+                   + "keys, and it forgets everything when you close the tab.";
 
   // The device path to the account key, spelled out because the whole point of
   // the landing state is that nobody has to guess it. It ends where the device's
@@ -79,8 +77,8 @@
 
   // What the one control says, in both of its states. It is a disclosure
   // button, so the label is the action and aria-expanded carries the state.
-  var OPEN_LABEL = "Open the simulator wallet";
-  var SHUT_LABEL = "Close the simulator wallet";
+  var OPEN_LABEL = "Open the wallet";
+  var SHUT_LABEL = "Close the wallet";
 
   // ---------------------------------------------------------------- the panel
 
@@ -1172,19 +1170,18 @@
     parent.appendChild(this.sayText);
   };
 
+  // The landing state used to open with two paragraphs about what a signing
+  // device is and what this panel is the other half of, before it got round to
+  // the one thing a visitor has to do. Anybody who has opened this has already
+  // decided to try it; what they need is the path and the reassurance that
+  // there is nothing to press afterwards. The rest of the argument is on the
+  // page around it and behind the i, where somebody who wants it can find it.
   Wallet.prototype.renderIdle = function () {
     this.body.appendChild(element("p", "wal-say",
-      "A SeedSigner signs; it does not hold coins. This panel is the other "
-      + "half: it watches your addresses on Bitsaga Signet, builds the "
-      + "transaction, and asks the device to sign it. " + NOT_REAL));
-    this.body.appendChild(element("p", "wal-say",
-      "To connect it, export the account's public key on the device:"));
+      "Export the account's public key on the device:"));
     this.body.appendChild(element("p", "wal-path", EXPORT_PATH));
     this.body.appendChild(element("p", "wal-say",
-      "Leave that QR on the device's screen. This panel is watching that "
-      + "screen and reads it off by itself; there is nothing here to press. "
-      + "The device cycles through several codes by default, and they are "
-      + "counted off here as they are read."));
+      "Leave the QR on the screen. This panel reads it off by itself."));
     this.sayInto(this.body);
   };
 

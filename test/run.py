@@ -63,6 +63,7 @@ SUITE = [
     ("cards_seedkeeper", ["test_cards_seedkeeper.py"], True),
     ("cards_descriptor", ["test_cards_seedkeeper_descriptor.py"], True),
     ("cards_empty_seedkeeper", ["test_cards_empty_seedkeeper.py"], True),
+    ("stock_image_entropy", ["test_image_entropy.py"], True),
     ("mainnet", ["test_mainnet.py"], True),
     ("tutorial", ["test_tutorial.py"], True),
 ]
@@ -82,6 +83,7 @@ EXTRA_ENV = {
     "stock_scan_seedqr": {"QR_KIND": "qr", **STOCK},
     "stock_scan_compact": {"QR_KIND": "qr-compact", **STOCK},
     "stock_scan_native": dict(STOCK),
+    "stock_image_entropy": dict(STOCK),
 }
 
 
