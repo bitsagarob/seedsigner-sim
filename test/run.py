@@ -62,6 +62,7 @@ SUITE = [
     ("cards_seed", ["test_cards_seed.py"], True),
     ("cards_seedkeeper", ["test_cards_seedkeeper.py"], True),
     ("cards_descriptor", ["test_cards_seedkeeper_descriptor.py"], True),
+    ("cards_empty_seedkeeper", ["test_cards_empty_seedkeeper.py"], True),
     ("mainnet", ["test_mainnet.py"], True),
     ("tutorial", ["test_tutorial.py"], True),
 ]

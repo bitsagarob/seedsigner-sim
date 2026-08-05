@@ -621,6 +621,36 @@ if _pgv is not None and not hasattr(_pgv, "_format_word_password"):
     _pgv._format_word_password = _fwp
     js_log("patched in password_generator_views._format_word_password")
 
+# --- and a second one, same shape -------------------------------------------
+# SeedKeeperSelectView.run() reads self.seed at two points that both come
+# before the only line that ever assigns it. The assignment is far down the
+# success path, after a secret has been exported; the two reads are on the way
+# out -- "this card holds nothing I can load", and "back was pressed at the
+# secret list" -- so both of the ordinary ways of leaving that screen raise
+# AttributeError instead of leaving it. Loading from a freshly initialised card
+# is the first one, and it is what a new SeedKeeper does.
+#
+# Both reads ask the same question, isinstance(self.seed, AezeedSeed), to decide
+# whether to return to the aezeed passphrase screen rather than straight back.
+# So the attribute is given the value the assignment further down uses, at
+# construction, which answers that question correctly in both directions: no
+# pending seed is not an AezeedSeed and goes back, and a pending aezeed still
+# reaches its passphrase screen. Setting it only when it is missing leaves a
+# fixed upstream alone.
+#
+# Still open on upstream's master, unlike the one above.
+if _pgv is not None:
+    from seedsigner.views.seed_views import SeedKeeperSelectView as _sksv
+    _orig_sksv_init = _sksv.__init__
+
+    def _sksv_init(self, *args, **kwargs):
+        _orig_sksv_init(self, *args, **kwargs)
+        if not hasattr(self, "seed"):
+            self.seed = self.controller.storage.get_pending_seed()
+
+    _sksv.__init__ = _sksv_init
+    js_log("patched in SeedKeeperSelectView.seed")
+
 # --- which Bitcoin network the wallet is set to ------------------------------
 # The page has to show this, and the page must not be the one that knows it: a
 # second copy of a setting is a copy that can disagree with the wallet, and it

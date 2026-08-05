@@ -17,6 +17,13 @@
  * blocks inside SeedSigner's controller loop and SharedArrayBuffer is the only
  * channel that can reach it.
  */
+// Not bumped when the list below only grows, and that is deliberate. The cache
+// is named after VERSION and activate deletes every other one, so a bump throws
+// away the immutable half too -- twenty megabytes of Pyodide re-downloaded by
+// everybody who already had it, to pick up a few kilobytes of script. A changed
+// file here is enough to install this worker again, and install adds the new
+// entries to the cache that is already there. Bump it when something cached
+// must be thrown away, not when something new is added.
 const VERSION = "sim-v7";
 const CACHE = "seedsignersim-" + VERSION;
 
@@ -48,6 +55,18 @@ const SHELL = [
   "./doom-boot.js",
   "./doom-run.js",
   "./jsQR.js",
+  // The four the page loads once somebody does more than look at the device:
+  // the coordinator beside it, the tutorial that drives it, and the two codecs
+  // both of those need to put a QR on the screen and read one back. They are
+  // fetched on use and so were cached on use, which is not the same thing --
+  // the rule below is network-first, so a script nobody had reached yet was a
+  // script that failed on the first bad connection. 127KB against a boot of
+  // twenty megabytes, and it makes the offline claim on the page true rather
+  // than nearly true.
+  "./signet-coordinator.js",
+  "./wallet-tutorial.js",
+  "./qr-encode.js",
+  "./ur-decode.js",
   "./browser_camera.py",
   "./browser_qr.py",
   "./browser_display.py",
