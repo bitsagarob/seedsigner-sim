@@ -600,14 +600,33 @@ const track = window.Track || { event() {}, screen() {}, milestone() {} };
 // the console, which is what the tests read, but it is noise for anyone else.
 const DEBUG = new URLSearchParams(location.search).has("debug");
 
-// Which firmware to run. Two are built: "smartcard" is the 3rdIteration fork
-// with SeedKeeper and Satochip support, which is what this page has always run
-// and stays the default; "stock" is SeedSigner as its own project publishes it.
-// ?firmware=stock picks the other one. Checked against the list rather than
-// interpolated, so the URL cannot name a file to fetch.
-const FIRMWARES = ["smartcard", "stock"];
-const asked = new URLSearchParams(location.search).get("firmware");
-const FIRMWARE = FIRMWARES.includes(asked) ? asked : FIRMWARES[0];
+// Which firmware to run. Two are built: "stock" is SeedSigner as its own
+// project publishes it, and it is the default because it is much the lighter
+// boot -- it needs neither cryptography nor pycryptodome, nor the openssl and
+// cffi that come behind them, and its wallet zip is under half the size. That
+// is roughly a third off the download, which is paid on the first visit, on
+// whatever connection the visitor happens to be on. "smartcard" is the
+// 3rdIteration fork that adds SeedKeeper and Satochip; ?firmware=smartcard
+// picks it and the row under the device switches to it.
+//
+// The cost of this default is honest: a bare visit has no card tray, because
+// there are no cards in stock SeedSigner. The row is one click away and says
+// so, which is the trade -- most people arriving have not come for cards, and
+// everybody pays the download.
+//
+// The two things that exist only in the fork ask for it themselves. DOOM and
+// the tutorial are both smartcard-only, so a link carrying ?doom or ?tutorial
+// and no firmware means the fork, rather than a page that silently drops the
+// thing the link was for.
+//
+// Checked against the list rather than interpolated, so the URL cannot name a
+// file to fetch.
+const FIRMWARES = ["stock", "smartcard"];
+const search = new URLSearchParams(location.search);
+const asked = search.get("firmware");
+const FORK_ASKED_FOR = search.has("doom") || search.get("tutorial") !== null;
+const FIRMWARE = FIRMWARES.includes(asked) ? asked
+               : (FORK_ASKED_FOR ? "smartcard" : FIRMWARES[0]);
 
 // The multisig tutorial. It drives the device, the cards and the camera, so it
 // needs a wallet that has just booted and three cards nobody has touched, which
@@ -680,6 +699,39 @@ const statusEl = document.getElementById("status");
 const doomHint = document.getElementById("doom-hint");
 const cameraHint = document.getElementById("camera-hint");
 const networkEl = document.getElementById("network");
+
+// One line, two things that can want it, and the live one wins. The notice is
+// static -- this machine has no camera, said before anybody presses anything --
+// and the trouble is the camera channel reporting that frames have stopped. The
+// trouble has to be able to clear itself without taking the notice with it,
+// which one textContent shared by both could not do.
+let cameraNotice = "";
+let cameraTrouble = "";
+function paintCameraHint() {
+  cameraHint.textContent = cameraTrouble || cameraNotice;
+}
+
+// Whether there is a camera at all, answered before the visitor spends a press
+// finding out. Scan is the first tile on the device's home screen and it starts
+// selected, so the very first press on a fresh page is also the one most likely
+// to dead-end: it opens the camera, and if there is none the device shows a bare
+// error screen that says nothing about why. enumerateDevices answers this
+// without prompting for anything -- labels stay empty until permission is
+// given, but the kinds are there to count.
+function noticeWhetherThereIsACamera() {
+  const cannot = "There is no camera here, so Scan on the device will not work. " +
+                 "Everything else will.";
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    cameraNotice = cannot;
+    paintCameraHint();
+    return;
+  }
+  navigator.mediaDevices.enumerateDevices().then((devices) => {
+    if (devices.some((device) => device.kind === "videoinput")) return;
+    cameraNotice = cannot;
+    paintCameraHint();
+  }).catch(() => { /* nothing to say if it will not even tell us */ });
+}
 
 // The two header panels are popovers: they cover the page rather than pushing
 // it down, so anything they cover is unclickable while they are open, and a
@@ -1144,7 +1196,7 @@ function startWallet() {
   // gone quiet is also one that cannot be left.
   CameraChannel.runPage(cameraBuffer, {
     source: cameraSource,
-    onTrouble: (message) => { cameraHint.textContent = message; },
+    onTrouble: (message) => { cameraTrouble = message; paintCameraHint(); },
   });
   const tray = cardBuffer ? CardTray.runPage(cardBuffer, "cardtray") : null;
 
@@ -1177,9 +1229,23 @@ function startWallet() {
 }
 
 if (!window.crossOriginIsolated) {
-  statusEl.textContent = "this page needs cross-origin isolation, which the server is not sending";
+  // Two different faults land here and they want different answers, so they get
+  // them. No SharedArrayBuffer at all is the browser withholding it, which some
+  // privacy-focused browsers do on purpose and which no header from this end can
+  // change; having it and still not being isolated means the headers did not
+  // arrive. Blaming the server for both sent people to check something that was
+  // never wrong, since this origin does send COOP and COEP on every response.
+  statusEl.textContent = typeof SharedArrayBuffer === "undefined"
+    ? "this browser will not give the page shared memory, which is what the " +
+      "simulator runs on. Firefox, Chrome, Edge and Safari all will; some " +
+      "privacy browsers turn it off, and that setting is the thing to look for."
+    : "this page needs cross-origin isolation and is not getting it. If this is " +
+      "your own copy of the site, it has to send COOP and COEP on every response.";
   statusEl.className = "err";
 } else {
+  // Before anything is pressed, and only when the page is going to run at all.
+  noticeWhetherThereIsACamera();
+
   // The keyboard, out here rather than inside the wallet: the same eight keys
   // drive DOOM before the unlock and the wallet after it, and pressKey is what
   // knows which of them is holding the device. keyup is only ever any use to

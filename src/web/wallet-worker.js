@@ -52,9 +52,22 @@ async function boot(width, height) {
   pyodide = await loadPyodide({ indexURL: "pyodide/" });
 
   post("status", { message: "loading libraries…" });
+  // Pillow and pycryptodome are wanted whichever firmware this is: the renderer
+  // draws every screen with Pillow, and pycryptodome is what stands in for
+  // pbkdf2_hmac further down, which is the mnemonic to seed path and so is the
+  // wallet itself. Dropping that one boots a stock wallet that hangs before the
+  // home screen, which is how it was caught.
+  //
+  // cryptography is the fork's alone. Twelve files in the smartcard tree import
+  // it, for pysatochip's card sessions; nothing in stock does, and neither do
+  // the stand-in packages here. Loading it regardless charged every stock visit
+  // for it, plus the openssl and cffi Pyodide pulls in behind it.
+  //
   // numpy is never reachable: decode_qr imports it inside a try that starts with
   // "import cv2", and opencv is not in this list, so np is None either way.
-  await pyodide.loadPackage(["Pillow", "pycryptodome", "cryptography"]);
+  await pyodide.loadPackage(firmware === "smartcard"
+    ? ["Pillow", "pycryptodome", "cryptography"]
+    : ["Pillow", "pycryptodome"]);
 
   post("status", { message: "unpacking wallet…" });
   // One zip per firmware, each built by build/build-wallet-zip.sh from its own
