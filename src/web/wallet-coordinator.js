@@ -81,6 +81,16 @@
   var OPEN_LABEL = "Open wallet";
   var SHUT_LABEL = "Close wallet";
 
+  // A wallet: the body, and the pocket a card slides into on its right edge.
+  // Drawn here rather than fetched, in the stroke idiom the page's other icon
+  // already uses, and deliberately not a flat rectangle with a stripe -- that
+  // is a bank card, and there are three of those in the tray below this.
+  var WALLET_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<rect x="3" y="5.5" width="18" height="13" rx="2.6"></rect>' +
+    '<path d="M21 10.4h-3.3a2 2 0 0 0 0 4H21"></path>' +
+    '</svg>';
+
   // ---------------------------------------------------------------- the panel
 
   // The page's own idiom, and nothing new: the tutorial panel's fill, border and
@@ -96,17 +106,29 @@
     // does not read as the way into the only thing here that can hold a
     // balance. Orange, because it is the one action on this page worth taking;
     // the firmware row under it is grey, and is a preference rather than an act.
-    ".wal-open{display:inline-flex;align-items:center;gap:.55rem;font:inherit;",
+    // The control, and beside it what the wallet is doing. They were one
+    // object, which made the button's own name change under a screen reader
+    // every time the balance moved, and read as a status chip somebody had put
+    // a border round. Wrapping, because a phone cannot hold both on one line.
+    ".wal-openrow{display:flex;flex-wrap:wrap;align-items:center;",
+    "justify-content:center;gap:.4rem .7rem}",
+    ".wal-open{display:inline-flex;align-items:center;gap:.5rem;font:inherit;",
     "font-size:.9rem;color:#f7931a;background:#16181c;border:1px solid #f7931a;",
     "border-radius:8px;padding:.55rem 1.1rem;cursor:pointer}",
     ".wal-open:hover{background:#1c2026}",
     ".wal-open:focus-visible{outline:2px solid #f7931a;outline-offset:2px}",
     ".wal-open b{font-weight:600}",
-    ".wal-open .wal-line{display:flex;align-items:center;gap:.55rem}",
-    ".wal-open .wal-state{color:#7c848f;font-size:.85em}",
-    ".wal-open .wal-dot{width:.45rem;height:.45rem;",
+    // The page's own icon idiom, taken from the fullscreen control: strokes
+    // that inherit the label's colour, so there is no second rule to keep in
+    // step with it.
+    ".wal-open svg{width:1.1em;height:1.1em;flex:none;fill:none;",
+    "stroke:currentColor;stroke-width:1.6;stroke-linecap:round;",
+    "stroke-linejoin:round}",
+    ".wal-status{margin:0;display:flex;align-items:center;gap:.4rem;",
+    "color:#7c848f;font-size:.85rem}",
+    ".wal-status .wal-dot{width:.45rem;height:.45rem;",
     "flex:none;border-radius:50%;background:#3a4048}",
-    ".wal-open[data-on=yes] .wal-dot{background:#f7931a}",
+    ".wal-status[data-on=yes] .wal-dot{background:#f7931a}",
     // It stays where it is when the drawer opens, and closes it again. The
     // strip was hidden while open, which cost nothing because it floated over
     // the page; a button in the flow that vanished would take the row under it
@@ -385,21 +407,32 @@
     this.opener.id = "wallet-button";
     this.opener.setAttribute("aria-expanded", "false");
     this.opener.setAttribute("aria-controls", "wallet");
-    var line = element("div", "wal-line");
-    line.appendChild(element("span", "wal-dot"));
+    this.opener.insertAdjacentHTML("afterbegin", WALLET_ICON);
     // The label says what pressing it does, not what the thing behind it is
     // called. "Simulator wallet" beside a dot and a state reads as a status
     // chip, and a status chip is exactly what nobody pressed.
     this.openerLabel = element("b", null, OPEN_LABEL);
-    line.appendChild(this.openerLabel);
-    this.openerState = element("span", "wal-state", "Not connected");
-    line.appendChild(this.openerState);
-    this.opener.appendChild(line);
+    this.opener.appendChild(this.openerLabel);
     this.opener.addEventListener("click", function () { self.toggle(); });
+
+    // What the wallet is doing, beside the button rather than inside it. It is
+    // not part of the action and it changes on its own, which is what a status
+    // is: role=status so a reader is told when it changes, and the dot is here
+    // with the words it belongs to rather than in front of the label.
+    this.openerStatus = element("p", "wal-status");
+    this.openerStatus.setAttribute("role", "status");
+    this.openerStatus.dataset.on = "no";
+    this.openerStatus.appendChild(element("span", "wal-dot"));
+    this.openerState = element("span", "wal-state", "Not connected");
+    this.openerStatus.appendChild(this.openerState);
+
+    var row = element("div", "wal-openrow");
+    row.appendChild(this.opener);
+    row.appendChild(this.openerStatus);
     // Into the footer's own slot when the page offers one, which puts it under
     // the device beside the firmware row and the card tray. Falling back to the
     // body keeps this module usable on a page that has made no room for it.
-    (document.getElementById("wallet-open-slot") || document.body).appendChild(this.opener);
+    (document.getElementById("wallet-open-slot") || document.body).appendChild(row);
 
     this.root = element("section", "wal");
     this.root.id = "wallet";
@@ -1147,7 +1180,7 @@
     if (!this.open) return;
     var self = this;
     this.body.textContent = "";
-    this.opener.dataset.on = this.stage === "ready" ? "yes" : "no";
+    this.openerStatus.dataset.on = this.stage === "ready" ? "yes" : "no";
     this.openerState.textContent = this.openerLine();
 
     if (this.stage === "idle") this.renderIdle();
