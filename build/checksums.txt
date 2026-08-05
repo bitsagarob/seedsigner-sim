@@ -63,7 +63,7 @@ c450748a6f9f440c36206e4cf1179f9ff40faa9faaa92512e0276ebc63f2f56c  src/web/wallet
 ebee89297750a166d7374a704abc9c3e9ef60403b4514c6e26fa0911862e3523  src/web/wallet-track.js
 5fb474ace6000daad38a40e4919cd5cf55436bbf6b0069cf180d3bbf83093f2c  src/web/wallet-tutorial.js
 7a77c7f20cac612a94b8ef8fa280d2657e8c7f313384291c231c02121464b968  src/web/wallet-worker.js
-58e888648bc01b344154abce6e4332fc7eb1e1f722ff6900e8aa34a2d17303eb  src/web/wallet.html
+f9bb905abcaf3823c04aa68f771947a22eff49507d0715025763c3a13c51eaa5  src/web/wallet.html
 
 # The stand-in packages, which build/build-wallet-zip.sh copies out of the working
 # tree and into a wallet zip whole. Every other input to that zip is pinned by a
